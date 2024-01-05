@@ -1,0 +1,117 @@
+# GraphQL schema example
+#
+# https://gqlgen.com/getting-started/
+
+
+type User {
+    id: Int!
+    fullname: String!
+    email: String!
+    ipAddress: String!
+    gender: String
+}
+
+type Group {
+   id: Int!
+   name: String!
+   createdAt: String!
+   adminId: Int!
+}
+
+input NewGroup {
+   name: String!
+   adminId: Int!
+}
+
+type GroupMember {
+    groupId: Int!
+    memberId: Int!
+}
+
+type GroupConversation {
+    id: Int!
+    groupId: Int!
+    senderId: Int!
+    content: String!
+    createdAt: Timestamp!
+}
+
+type PersonalConversation {
+    id: Int!
+    senderId: Int!
+    receiverId: Int!
+    content: String!
+    createdAt: Timestamp!
+}
+
+type Video {
+    id: ID!
+    name: String!
+    description: String!
+    user: User!
+    url: String!
+    createdAt: Timestamp!
+    screenshots: [Screenshot]
+    related(limit: Int = 25, offset: Int = 0): [Video!]!
+}
+
+type Screenshot {
+    id: ID!
+    videoId: ID!
+    url: String!
+}
+
+type Review {
+    id: ID!
+    videoId: ID!
+    user: User!
+    description: String!
+    rating: Int!
+    createdAt: Timestamp!
+}
+
+input NewVideo {
+    name: String!
+    description: String!
+    userId: ID!
+    url: String!
+}
+
+input NewScreenshot {
+    videoId: ID!
+    url: String!
+    description: String
+}
+
+input NewReview {
+    videoId: ID!
+    title: String!
+    description: String!
+    rating: Int!
+    userId: ID!
+}
+
+input NewPersonalConversation{
+    receiverName: String!
+    content : String!
+}
+
+type Mutation {
+    createVideo(input: NewVideo!): Video! @isAuthenticated
+    personalConversation(input: NewPersonalConversation!): PersonalConversation! @isAuthenticated
+    createGroup(input:NewGroup!): Group! @isAuthenticated
+}
+
+type Query {
+    Videos(limit: Int = 25, offset: Int = 0): [Video!]!
+    UserIdByName(name:String): Int! @isAuthenticated
+    UserDetailsByID : User! @isAuthenticated
+}
+
+type Subscription {
+    videoPublished: Video!
+}
+
+scalar Timestamp
+
+directive @isAuthenticated on FIELD_DEFINITION
