@@ -9,85 +9,241 @@ import (
 	"chat_application/api/dal"
 	"chat_application/graph/model"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/jmoiron/sqlx"
+	"github.com/markbates/going/randx"
 )
 
-// CreateVideo is the resolver for the createVideo field.
-func (r *mutationResolver) CreateVideo(ctx context.Context, input model.NewVideo) (*model.Video, error) {
-	fmt.Println("in createvideo")
-	raw, _ := ctx.Value(auth.UserCtxKey).(int)
-	fmt.Println(raw)
-	newVideo := &model.Video{
-		URL:         input.URL,
-		Description: input.Description,
-		Name:        input.Name,
+// CreatePersonalConversation is the resolver for the createPersonalConversation field.
+func (r *mutationResolver) CreatePersonalConversation(ctx context.Context, input model.NewPersonalConversation) (*model.PersonalConversation, error) {
+	var PersonalConversation model.PersonalConversation
+	db := dal.GetDB()
+	senderID := ctx.Value(auth.UserCtxKey).(string)
+	currentFormattedTime := currentFormattedTime()
+	errIfNoRows := db.QueryRow(
+		"INSERT INTO public.personal_conversations( sender_id, receiver_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id;", senderID, input.ReceiverID, input.Content, currentFormattedTime).Scan(&PersonalConversation.ID)
+	if errIfNoRows == nil {
+		PersonalConversation.SenderID = senderID
+		PersonalConversation.ReceiverID = input.ReceiverID
+		PersonalConversation.Content = input.Content
+		PersonalConversation.CreatedAt = currentFormattedTime
+		for id, _ := range senderAndReceiverMap {
+			fmt.Println("sub running")
+			if (senderAndReceiverMap[id]["senderID"] == senderID && senderAndReceiverMap[id]["receiverID"] == input.ReceiverID) || (senderAndReceiverMap[id]["senderID"] == input.ReceiverID && senderAndReceiverMap[id]["receiverID"] == senderID) {
+				fmt.Println("sender and receiver varified")
+				personalConversationPublishedChannelMap[id] <- &PersonalConversation
+			}
+		}
+		return &PersonalConversation, nil
 	}
-	var errr error
-	return newVideo, errr
+	return nil, errIfNoRows
 }
 
-// PersonalConversation is the resolver for the personalConversation field.
-func (r *mutationResolver) PersonalConversation(ctx context.Context, input model.NewPersonalConversation) (*model.PersonalConversation, error) {
-	var PersonalConversation model.PersonalConversation
-	receiverID, err := r.Query().UserIDByName(ctx, &input.ReceiverName)
-	if err != nil {
-		return &PersonalConversation, err
-	}
+// CreateGroupConversation is the resolver for the createGroupConversation field.
+func (r *mutationResolver) CreateGroupConversation(ctx context.Context, input model.NewGroupConversation) (*model.GroupConversation, error) {
+	var GroupConversation model.GroupConversation
 	db := dal.GetDB()
-	senderID := ctx.Value(auth.UserCtxKey).(int)
-	currentTime := time.Now()
-	outputFormat := "2006-01-02 15:04:05-07:00"
-	currentFormattedTime := currentTime.Format(outputFormat)
+	senderID := ctx.Value(auth.UserCtxKey).(string)
+	var removedFromGroup bool
 	errIfNoRows := db.QueryRow(
-		"INSERT INTO public.personal_conversations( sender_id, receiver_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id;", senderID, receiverID, input.Content, currentFormattedTime).Scan(&PersonalConversation.ID)
+		"SELECT is_removed FROM public.group_members where member_id=$1 and group_id=$2;", senderID, input.GroupID).Scan(&removedFromGroup)
+	if errIfNoRows != nil || removedFromGroup {
+		return nil, fmt.Errorf("user is no more member of group")
+	}
+	currentFormattedTime := currentFormattedTime()
+	errIfNoRows = db.QueryRow(
+		"INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id;",  input.GroupID, senderID, input.Content, currentFormattedTime).Scan(&GroupConversation.ID)
 	if errIfNoRows == nil {
-		PersonalConversation.CreatedAt = currentFormattedTime
-		return &PersonalConversation, nil
+		GroupConversation.SenderID = senderID
+		GroupConversation.GroupID = input.GroupID
+		GroupConversation.Content = input.Content
+		GroupConversation.CreatedAt = currentFormattedTime
+		for id, _ := range groupAndMemberMap {
+			fmt.Println("sub running")
+			if groupAndMemberMap[id]["groupID"] == input.GroupID {
+				_ = db.QueryRow(
+					"SELECT is_removed FROM public.group_members where member_id=$1 and group_id=$2;", groupAndMemberMap[id]["memberID"], input.GroupID).Scan(&removedFromGroup)
+					fmt.Println()
+				if !removedFromGroup {
+					fmt.Println("member and group varified")
+					groupConversationPublishedChannelMap[id] <- &GroupConversation
+				}
+			}
+		}
+		return &GroupConversation, nil
 	}
 	return nil, errIfNoRows
 }
 
 // CreateGroup is the resolver for the createGroup field.
 func (r *mutationResolver) CreateGroup(ctx context.Context, input model.NewGroup) (*model.Group, error) {
-	var  Group model.Group
+	var Group model.Group
 	db := dal.GetDB()
-	adminID := ctx.Value(auth.UserCtxKey).(int)
-	currentTime := time.Now()
-	outputFormat := "2006-01-02 15:04:05-07:00"
-	currentFormattedTime := currentTime.Format(outputFormat)
+	adminID := ctx.Value(auth.UserCtxKey).(string)
+	currentFormattedTime := currentFormattedTime()
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Execute the first insert with the RETURNING clause
+	_ = tx.QueryRow("INSERT INTO public.groups( name, admin_id, created_at) VALUES ( $1, $2, $3)  RETURNING id;", input.Name, adminID, currentFormattedTime).Scan(&Group.ID)
+
+	// Execute the second insert with the retrieved values
+	_, err = tx.Exec("INSERT INTO public.group_members (group_id, member_id) VALUES ($1, $2)", Group.ID, adminID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Commit the transaction
+	err = tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("Transaction committed successfully.")
+	Group.CreatedAt = currentFormattedTime
+	return &Group, nil
+}
+
+// AddGroupMembers is the resolver for the addGroupMembers field.
+func (r *mutationResolver) AddGroupMembers(ctx context.Context, input model.GroupMembersInput) (bool, error) {
+	adminID := ctx.Value(auth.UserCtxKey).(string)
+	db := dal.GetDB()
+	err := CheckUserIsAdminOfGroup(db, adminID, input.GroupID)
+	if err != nil {
+		return false, fmt.Errorf("user is not admin group")
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	for i, _ := range input.MemberID {
+		_, err = tx.Exec("INSERT INTO public.group_members (group_id, member_id) VALUES ($1, $2)", input.GroupID, input.MemberID[i])
+		if err != nil {
+			return false, err
+		}
+	}
+	// Commit the transaction
+	err = tx.Commit()
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// RemoveGroupMembers is the resolver for the removeGroupMembers field.
+func (r *mutationResolver) RemoveGroupMembers(ctx context.Context, input model.GroupMembersInput) (bool, error) {
+	adminID := ctx.Value(auth.UserCtxKey).(string)
+	db := dal.GetDB()
+	err := CheckUserIsAdminOfGroup(db, adminID, input.GroupID)
+	if err != nil {
+		return false, fmt.Errorf("user is not admin group")
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	currentFormattedTime := currentFormattedTime()
+	for i, _ := range input.MemberID {
+		_, err = tx.Exec("UPDATE public.group_members SET is_removed=true, removed_at=$1 WHERE group_id=$2 AND member_id=$3;", currentFormattedTime, input.GroupID, input.MemberID[i])
+		if err != nil {
+			return false, err
+		}
+	}
+	// Commit the transaction
+	err = tx.Commit()
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// DeletePersonalConversation is the resolver for the deletePersonalConversation field.
+func (r *mutationResolver) DeletePersonalConversation(ctx context.Context, messageID string) (bool, error) {
+	senderID := ctx.Value(auth.UserCtxKey).(string)
+	db := dal.GetDB()
+	result, err := db.Exec("DELETE FROM public.personal_conversation WHERE sender_id=$1 AND id=$2;", senderID, messageID)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return false, fmt.Errorf("wrong data")
+	}
+	return true, nil
+}
+
+// DeleteGroupConversation is the resolver for the deleteGroupConversation field.
+func (r *mutationResolver) DeleteGroupConversation(ctx context.Context, input model.DeleteGroupConversationInput) (bool, error) {
+	senderID := ctx.Value(auth.UserCtxKey).(string)
+	db := dal.GetDB()
+	var removedFromGroup bool
 	errIfNoRows := db.QueryRow(
-		"INSERT INTO public.groups( name, admin_id, created_at) VALUES ( $1, $2, $3)  RETURNING id;", input.Name, adminID, currentFormattedTime).Scan(&Group.ID)
-	if errIfNoRows == nil {
-		Group.CreatedAt = currentFormattedTime
-		return &Group, nil
+		"SELECT is_removed FROM public.group_members where member_id=$1 and group_id=$2;", senderID, input.GroupID).Scan(&removedFromGroup)
+	if errIfNoRows != nil || removedFromGroup {
+		return false, fmt.Errorf("user is no more member of group")
 	}
-	return nil, errIfNoRows
+	result, err := db.Exec("DELETE FROM public.group_conversations WHERE sender_id=$1 AND id=$2;", senderID, input.MessageID)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return false, fmt.Errorf("wrong data")
+	}
+	return true, nil
 }
 
-// Videos is the resolver for the Videos field.
-func (r *queryResolver) Videos(ctx context.Context, limit *int, offset *int) ([]*model.Video, error) {
-	panic(fmt.Errorf("not implemented: Videos - Videos"))
-}
-
-// UserIDByName is the resolver for the UserIdByName field.
-func (r *queryResolver) UserIDByName(ctx context.Context, name *string) (int, error) {
+// UserList is the resolver for the UserList field.
+func (r *queryResolver) UserList(ctx context.Context, input *model.UserListInput) ([]*model.User, error) {
 	db := dal.GetDB()
-	var UserID int
-	errIfNoRows := db.QueryRow("select id from public.users where fullname=$1", name).Scan(&UserID)
-	if errIfNoRows == nil {
-		return UserID, nil
+	offset := *input.Page * *input.Limit
+	var where []string
+	var whereKeyword string
+	var filterArgsList []interface{}
+	if input.Name != nil {
+		where = append(where, "fullname ILIKE '%' || ? || '%'")
+		filterArgsList = append(filterArgsList, *input.Name)
 	}
-	return 0, fmt.Errorf("no user found with that name")
+	if input.Email != nil {
+		where = append(where, "email ILIKE '%' || ? || '%'")
+		filterArgsList = append(filterArgsList, *input.Email)
+	}
+	if len(where) > 0 {
+		whereKeyword = "WHERE"
+	}
+	query := fmt.Sprintf("SELECT id, fullname FROM users %s %v limit %d offset %d", whereKeyword, strings.Join(where, " AND "), *input.Limit, offset)
+	query = sqlx.Rebind(sqlx.DOLLAR, query)
+	rows, err := db.Query(query, filterArgsList...)
+	if err != nil {
+		return nil, err
+	}
+	var Users []*model.User
+	for rows.Next() {
+		var User model.User
+		err = rows.Scan(&User.ID, &User.Fullname, &User.Email, &User.IPAddress, &User.Gender)
+		if err != nil {
+			return nil, err
+		}
+		Users = append(Users, &User)
+	}
+	return Users, nil
 }
 
 // UserDetailsByID is the resolver for the UserDetailsByID field.
 func (r *queryResolver) UserDetailsByID(ctx context.Context) (*model.User, error) {
 	db := dal.GetDB()
-	id := ctx.Value(auth.UserCtxKey).(int)
+	id := ctx.Value(auth.UserCtxKey).(string)
 	var User model.User
 	errIfNoRows := db.QueryRow("select fullname, email, ip_address, gender from public.users where id=$1", id).Scan(&User.Fullname, &User.Email, &User.IPAddress, &User.Gender)
 	if errIfNoRows == nil {
@@ -97,9 +253,158 @@ func (r *queryResolver) UserDetailsByID(ctx context.Context) (*model.User, error
 	return &User, errIfNoRows
 }
 
-// VideoPublished is the resolver for the videoPublished field.
-func (r *subscriptionResolver) VideoPublished(ctx context.Context) (<-chan *model.Video, error) {
-	panic(fmt.Errorf("not implemented: VideoPublished - videoPublished"))
+// PersonalConversationRecords is the resolver for the PersonalConversationRecords field.
+func (r *queryResolver) PersonalConversationRecords(ctx context.Context, limit *int, offset *int, receiverID string) ([]*model.PersonalConversation, error) {
+	db := dal.GetDB()
+	UserID := ctx.Value(auth.UserCtxKey).(string)
+	rows, err := db.Query(
+		"select sender_id, receiver_id, content, created_at, id from public.personal_conversations where (sender_id = $1 and receiver_id = $2) or (sender_id = $2 and receiver_id = $1) order by created_at desc limit $3 offset $4 ", UserID, receiverID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	var PersonalConversations []*model.PersonalConversation
+	for rows.Next() {
+		var PersonalConversation model.PersonalConversation
+		err = rows.Scan(&PersonalConversation.SenderID, &PersonalConversation.ReceiverID, &PersonalConversation.Content, &PersonalConversation.CreatedAt, &PersonalConversation.ID)
+		if err != nil {
+			return nil, err
+		}
+		PersonalConversations = append(PersonalConversations, &PersonalConversation)
+	}
+	return PersonalConversations, nil
+}
+
+// GroupConversationRecords is the resolver for the GroupConversationRecords field.
+func (r *queryResolver) GroupConversationRecords(ctx context.Context, limit *int, offset *int, groupID string) ([]*model.GroupConversation, error) {
+	db := dal.GetDB()
+	UserID := ctx.Value(auth.UserCtxKey).(string)
+	var removedFromGroup bool
+	var removed_at string
+	errIfNoRows := db.QueryRow(
+		"SELECT is_removed,removed_at FROM public.group_members where member_id=$1 and group_id=$2;", UserID, groupID).Scan(&removedFromGroup, &removed_at)
+	if errIfNoRows != nil {
+		return nil, fmt.Errorf("user has not access of group")
+	}
+	var rows *sql.Rows
+	var err error
+	if removedFromGroup {
+		rows, err = db.Query("select id, sender_id, content, created_at from public.group_conversations where group_id = $1 and created_at = $2 order by created_at desc limit $3 offset $4 ", groupID, removed_at, limit, offset)
+	} else {
+		rows, err = db.Query("select id, sender_id, content, created_at from public.group_conversations where group_id = $1 order by created_at desc limit $2 offset $3 ", groupID, limit, offset)
+	}
+	if err != nil {
+		return nil, err
+	}
+	var GroupConversations []*model.GroupConversation
+	for rows.Next() {
+		var GroupConversation model.GroupConversation
+		GroupConversation.GroupID = groupID
+		err = rows.Scan(&GroupConversation.ID, &GroupConversation.SenderID, &GroupConversation.Content, &GroupConversation.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		GroupConversations = append(GroupConversations, &GroupConversation)
+	}
+	return GroupConversations, nil
+}
+
+// RecentConversationList is the resolver for the RecentConversationList field.
+func (r *queryResolver) RecentConversationList(ctx context.Context, limit *int, offset *int) ([]*model.ConversationList, error) {
+	db := dal.GetDB()
+	UserID := ctx.Value(auth.UserCtxKey).(string)
+	rows, err := db.Query(
+		`
+		select
+			last_message_time,
+			conversation_id,
+			is_it_group
+		from
+			(
+			select
+				case
+					when is_removed = true then removed_at
+					else max(created_at)
+				end as last_message_time,
+				gc.group_id as conversation_id,
+				'true' as is_it_group
+			from
+				public.group_conversations gc
+			inner join public.group_members gm on
+				gc.group_id = gm.group_id
+			where
+				gc.group_id in (
+				select
+					group_id
+				from
+					public.group_members
+				where
+					member_id = $1
+		    )
+				and gm.member_id = $1
+			group by
+				(gc.group_id,
+				gm.is_removed,
+				gm.removed_at)
+		union
+			select
+				MAX(created_at) as last_message_time,
+				case
+					when sender_id = $1 then receiver_id
+					else sender_id
+				end as recent_conversation_id,
+				'false' as is_it_group
+			from
+				public.personal_conversations
+			where
+				sender_id = $1
+				or receiver_id = $1
+			group by
+				recent_conversation_id
+		)
+		order by
+			last_message_time desc
+		limit $2 offset $3;`, UserID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	var ConversationList []*model.ConversationList
+	for rows.Next() {
+		var Conversation model.ConversationList
+		err = rows.Scan(&Conversation.ConversationID, &Conversation.LastMessageTime, &Conversation.IsItGroup)
+		if err != nil {
+			return nil, err
+		}
+		ConversationList = append(ConversationList, &Conversation)
+	}
+	return ConversationList, nil
+}
+
+// PersonalConversationPublished is the resolver for the personalConversationPublished field.
+func (r *subscriptionResolver) PersonalConversationPublished(ctx context.Context, input model.PersonalConversationPublishedInput) (<-chan *model.PersonalConversation, error) {
+	id := randx.String(8)
+	// fmt.Println(id)
+	personalConversationEvent := make(chan *model.PersonalConversation, 1)
+	go func() {
+		<-ctx.Done()
+		defer clearSubscriptionVariablesOfPersonalConversation(id)
+	}()
+	senderAndReceiverMap[id] = map[string]string{"senderID": input.SenderID, "receiverID": input.ReceiverID}
+	personalConversationPublishedChannelMap[id] = personalConversationEvent
+	return personalConversationEvent, nil
+}
+
+// GroupConversationPublished is the resolver for the groupConversationPublished field.
+func (r *subscriptionResolver) GroupConversationPublished(ctx context.Context, input model.GroupConversationPublishedInput) (<-chan *model.GroupConversation, error) {
+	id := randx.String(8)
+	// fmt.Println(id)
+	groupConversationEvent := make(chan *model.GroupConversation, 1)
+	go func() {
+		<-ctx.Done()
+		defer clearSubscriptionVariablesOfGroupConversation(id)
+	}()
+	groupAndMemberMap[id] = map[string]string{"groupID": input.GroupID, "memberID": input.MemberID}
+	groupConversationPublishedChannelMap[id] = groupConversationEvent
+	return groupConversationEvent, nil
 }
 
 // Mutation returns MutationResolver implementation.
@@ -121,12 +426,41 @@ type subscriptionResolver struct{ *Resolver }
 //   - When renaming or deleting a resolver the old code will be put in here. You can safely delete
 //     it when you're done.
 //   - You have helper methods in this file. Move them out to keep these resolver files clean.
+
+var groupConversationPublishedChannelMap map[string]chan *model.GroupConversation
+var personalConversationPublishedChannelMap map[string]chan *model.PersonalConversation
+var senderAndReceiverMap = make(map[string]map[string]string)
+var groupAndMemberMap = make(map[string]map[string]string)
+
+func init() {
+	personalConversationPublishedChannelMap = map[string]chan *model.PersonalConversation{}
+	groupConversationPublishedChannelMap = map[string]chan *model.GroupConversation{}
+}
+func (r *queryResolver) UserIDByName(ctx context.Context, name *string) (string, error) {
+	db := dal.GetDB()
+	var UserID string
+	errIfNoRows := db.QueryRow("select id from public.users where fullname=$1", name).Scan(&UserID)
+	if errIfNoRows == nil {
+		return UserID, nil
+	}
+	return "", fmt.Errorf("no user found with that name")
+}
+
 type contextKey string
 
 var (
 	UserIDCtxKey = contextKey("userID")
 )
 
+func clearSubscriptionVariablesOfPersonalConversation(id string) {
+	delete(senderAndReceiverMap, id)
+	delete(personalConversationPublishedChannelMap, id)
+}
+
+func clearSubscriptionVariablesOfGroupConversation(id string) {
+	delete(groupAndMemberMap, id)
+	delete(groupConversationPublishedChannelMap, id)
+}
 func NewRootResolvers() Config {
 	c := Config{
 		Resolvers: &Resolver{},
@@ -134,10 +468,9 @@ func NewRootResolvers() Config {
 	// Complexity
 	// Schema Directive
 	c.Directives.IsAuthenticated = func(ctx context.Context, obj interface{}, next graphql.Resolver) (res interface{}, err error) {
-		fmt.Println(UserIDCtxKey)
-		authorizationKey := ctx.Value(auth.UserCtxKey).(int)
-		fmt.Println(authorizationKey)
-		if authorizationKey != 0 {
+		authorizationKey := ctx.Value(auth.UserCtxKey).(string)
+		fmt.Println("Authorization key:" + authorizationKey)
+		if authorizationKey != "" {
 			fmt.Println("with autho")
 			ok, errorMessage := ValidateUserByAuthorizationKey(authorizationKey)
 			if ok {
@@ -152,7 +485,7 @@ func NewRootResolvers() Config {
 	}
 	return c
 }
-func ValidateUserByAuthorizationKey(id int) (bool, string) {
+func ValidateUserByAuthorizationKey(id string) (bool, string) {
 	db := dal.GetDB()
 	rows, err := db.Query("select id from public.users where id=$1", id)
 	if err != nil {
@@ -167,4 +500,16 @@ func ValidateUserByAuthorizationKey(id int) (bool, string) {
 		return false, "invalid authorization key"
 	}
 	return true, ""
+}
+func CheckUserIsAdminOfGroup(db *sql.DB, adminID string, groupID string) error {
+	errIfNoRows := db.QueryRow("select admin_id from public.groups where admin_id = $1 and id = $2;", adminID, groupID).Scan(&adminID)
+	fmt.Println(adminID, groupID)
+	return errIfNoRows
+}
+
+func currentFormattedTime() string {
+	currentTime := time.Now()
+	outputFormat := "2006-01-02 15:04:05-07:00"
+	currentFormattedTime := currentTime.Format(outputFormat)
+	return currentFormattedTime
 }

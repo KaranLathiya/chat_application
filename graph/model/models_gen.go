@@ -2,104 +2,89 @@
 
 package model
 
+type ConversationList struct {
+	LastMessageTime string `json:"lastMessageTime"`
+	ConversationID  string `json:"conversationId"`
+	IsItGroup       bool   `json:"isItGroup"`
+}
+
+type DeleteGroupConversationInput struct {
+	GroupID   string `json:"groupId"`
+	MessageID string `json:"messageId"`
+}
+
 type Group struct {
-	ID        int    `json:"id"`
+	ID        string `json:"id"`
 	Name      string `json:"name"`
 	CreatedAt string `json:"createdAt"`
-	AdminID   int    `json:"adminId"`
+	AdminID   string `json:"adminId"`
 }
 
 type GroupConversation struct {
-	ID        int    `json:"id"`
-	GroupID   int    `json:"groupId"`
-	SenderID  int    `json:"senderId"`
+	ID        string `json:"id"`
+	GroupID   string `json:"groupId"`
+	SenderID  string `json:"senderId"`
 	Content   string `json:"content"`
 	CreatedAt string `json:"createdAt"`
 }
 
-type GroupMember struct {
-	GroupID  int `json:"groupId"`
-	MemberID int `json:"memberId"`
+type GroupConversationPublishedInput struct {
+	GroupID  string `json:"groupId"`
+	MemberID string `json:"memberId"`
+}
+
+type GroupMembersInput struct {
+	GroupID  string   `json:"groupId"`
+	MemberID []string `json:"memberId"`
 }
 
 type Mutation struct {
 }
 
 type NewGroup struct {
-	Name    string `json:"name"`
-	AdminID int    `json:"adminId"`
+	Name string `json:"name"`
+}
+
+type NewGroupConversation struct {
+	GroupID string `json:"groupId"`
+	Content string `json:"content"`
 }
 
 type NewPersonalConversation struct {
-	ReceiverName string `json:"receiverName"`
-	Content      string `json:"content"`
-}
-
-type NewReview struct {
-	VideoID     string `json:"videoId"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Rating      int    `json:"rating"`
-	UserID      string `json:"userId"`
-}
-
-type NewScreenshot struct {
-	VideoID     string  `json:"videoId"`
-	URL         string  `json:"url"`
-	Description *string `json:"description,omitempty"`
-}
-
-type NewVideo struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	UserID      string `json:"userId"`
-	URL         string `json:"url"`
+	ReceiverID string `json:"receiverId"`
+	Content    string `json:"content"`
 }
 
 type PersonalConversation struct {
-	ID         int    `json:"id"`
-	SenderID   int    `json:"senderId"`
-	ReceiverID int    `json:"receiverId"`
+	ID         string `json:"id"`
+	SenderID   string `json:"senderId"`
+	ReceiverID string `json:"receiverId"`
 	Content    string `json:"content"`
 	CreatedAt  string `json:"createdAt"`
 }
 
+type PersonalConversationPublishedInput struct {
+	SenderID   string `json:"senderId"`
+	ReceiverID string `json:"receiverId"`
+}
+
 type Query struct {
-}
-
-type Review struct {
-	ID          string `json:"id"`
-	VideoID     string `json:"videoId"`
-	User        *User  `json:"user"`
-	Description string `json:"description"`
-	Rating      int    `json:"rating"`
-	CreatedAt   string `json:"createdAt"`
-}
-
-type Screenshot struct {
-	ID      string `json:"id"`
-	VideoID string `json:"videoId"`
-	URL     string `json:"url"`
 }
 
 type Subscription struct {
 }
 
 type User struct {
-	ID        int     `json:"id"`
+	ID        string  `json:"id"`
 	Fullname  string  `json:"fullname"`
 	Email     string  `json:"email"`
 	IPAddress string  `json:"ipAddress"`
 	Gender    *string `json:"gender,omitempty"`
 }
 
-type Video struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Description string        `json:"description"`
-	User        *User         `json:"user"`
-	URL         string        `json:"url"`
-	CreatedAt   string        `json:"createdAt"`
-	Screenshots []*Screenshot `json:"screenshots,omitempty"`
-	Related     []*Video      `json:"related"`
+type UserListInput struct {
+	Name  *string `json:"name,omitempty"`
+	Email *string `json:"email,omitempty"`
+	Limit *int    `json:"limit,omitempty"`
+	Page  *int    `json:"page,omitempty"`
 }

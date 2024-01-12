@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 )
 
 var UserCtxKey = &contextKey{"user"}
@@ -16,22 +15,33 @@ type contextKey struct {
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("in middleware")
-		header := r.Header.Get("Authorization")
-		fmt.Println(header)
+		handleCORS(w,r)
+		AuthorizationKey := r.Header.Get("Authorization")
+		fmt.Println("Authorization key:"+AuthorizationKey)
+
 		// Allow unauthenticated users in
-		if header == "" {
-			fmt.Println("no header")
-			ctx := context.WithValue(r.Context(), UserCtxKey, 0)
+		if AuthorizationKey == "" {
+			ctx := context.WithValue(r.Context(), UserCtxKey, "")
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
-		AuthorizationKey,_ := strconv.Atoi(header)
-		// // put it in context
-			
 		ctx := context.WithValue(r.Context(), UserCtxKey, AuthorizationKey)
 
 		// and call the next with our new context
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func handleCORS(w http.ResponseWriter,r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Content-Type", "json/application")
+	// Handle preflight requests
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 }
