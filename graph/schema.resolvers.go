@@ -10,12 +10,10 @@ import (
 	"chat_application/graph/model"
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql"
 	"github.com/jmoiron/sqlx"
 	"github.com/markbates/going/randx"
 )
@@ -27,19 +25,20 @@ func (r *mutationResolver) CreatePersonalConversation(ctx context.Context, input
 	senderID := ctx.Value(auth.UserCtxKey).(string)
 	currentFormattedTime := currentFormattedTime()
 	errIfNoRows := db.QueryRow(
-		"INSERT INTO public.personal_conversations( sender_id, receiver_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id;", senderID, input.ReceiverID, input.Content, currentFormattedTime).Scan(&PersonalConversation.ID)
+		"INSERT INTO public.personal_conversations( sender_id, receiver_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id, created_at;", senderID, input.ReceiverID, input.Content, currentFormattedTime).Scan(&PersonalConversation.ID, &PersonalConversation.CreatedAt)
 	if errIfNoRows == nil {
 		PersonalConversation.SenderID = senderID
 		PersonalConversation.ReceiverID = input.ReceiverID
 		PersonalConversation.Content = input.Content
-		PersonalConversation.CreatedAt = currentFormattedTime
-		for id, _ := range senderAndReceiverMap {
-			fmt.Println("sub running")
-			if (senderAndReceiverMap[id]["senderID"] == senderID && senderAndReceiverMap[id]["receiverID"] == input.ReceiverID) || (senderAndReceiverMap[id]["senderID"] == input.ReceiverID && senderAndReceiverMap[id]["receiverID"] == senderID) {
-				fmt.Println("sender and receiver varified")
-				personalConversationPublishedChannelMap[id] <- &PersonalConversation
+		go func() {
+			for id, _ := range senderAndReceiverMap {
+				fmt.Println("sub running")
+				if (senderAndReceiverMap[id]["senderID"] == senderID && senderAndReceiverMap[id]["receiverID"] == input.ReceiverID) || (senderAndReceiverMap[id]["senderID"] == input.ReceiverID && senderAndReceiverMap[id]["receiverID"] == senderID) {
+					fmt.Println("sender and receiver varified")
+					personalConversationPublishedChannelMap[id] <- &PersonalConversation
+				}
 			}
-		}
+		}()
 		return &PersonalConversation, nil
 	}
 	return nil, errIfNoRows
@@ -53,29 +52,27 @@ func (r *mutationResolver) CreateGroupConversation(ctx context.Context, input mo
 	var removedFromGroup bool
 	errIfNoRows := db.QueryRow(
 		"SELECT is_removed FROM public.group_members where member_id=$1 and group_id=$2;", senderID, input.GroupID).Scan(&removedFromGroup)
-	if errIfNoRows != nil || removedFromGroup {
+	if errIfNoRows != nil {
+		return nil, fmt.Errorf("user is not member of group")
+	}
+	if removedFromGroup {
 		return nil, fmt.Errorf("user is no more member of group")
 	}
 	currentFormattedTime := currentFormattedTime()
 	errIfNoRows = db.QueryRow(
-		"INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id;",  input.GroupID, senderID, input.Content, currentFormattedTime).Scan(&GroupConversation.ID)
+		"INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id, created_at;", input.GroupID, senderID, input.Content, currentFormattedTime).Scan(&GroupConversation.ID, &GroupConversation.CreatedAt)
 	if errIfNoRows == nil {
 		GroupConversation.SenderID = senderID
 		GroupConversation.GroupID = input.GroupID
 		GroupConversation.Content = input.Content
-		GroupConversation.CreatedAt = currentFormattedTime
-		for id, _ := range groupAndMemberMap {
-			fmt.Println("sub running")
-			if groupAndMemberMap[id]["groupID"] == input.GroupID {
-				_ = db.QueryRow(
-					"SELECT is_removed FROM public.group_members where member_id=$1 and group_id=$2;", groupAndMemberMap[id]["memberID"], input.GroupID).Scan(&removedFromGroup)
-					fmt.Println()
-				if !removedFromGroup {
-					fmt.Println("member and group varified")
+		go func() {
+			for id, _ := range groupAndMemberMap {
+				fmt.Println("sub running")
+				if groupAndMemberMap[id]["groupID"] == input.GroupID {
 					groupConversationPublishedChannelMap[id] <- &GroupConversation
 				}
 			}
-		}
+		}()
 		return &GroupConversation, nil
 	}
 	return nil, errIfNoRows
@@ -94,7 +91,7 @@ func (r *mutationResolver) CreateGroup(ctx context.Context, input model.NewGroup
 	defer tx.Rollback()
 
 	// Execute the first insert with the RETURNING clause
-	_ = tx.QueryRow("INSERT INTO public.groups( name, admin_id, created_at) VALUES ( $1, $2, $3)  RETURNING id;", input.Name, adminID, currentFormattedTime).Scan(&Group.ID)
+	_ = tx.QueryRow("INSERT INTO public.groups( name, admin_id, created_at) VALUES ( $1, $2, $3)  RETURNING id, created_at;", input.Name, adminID, currentFormattedTime).Scan(&Group.ID, &Group.CreatedAt)
 
 	// Execute the second insert with the retrieved values
 	_, err = tx.Exec("INSERT INTO public.group_members (group_id, member_id) VALUES ($1, $2)", Group.ID, adminID)
@@ -108,7 +105,8 @@ func (r *mutationResolver) CreateGroup(ctx context.Context, input model.NewGroup
 		return nil, err
 	}
 	fmt.Println("Transaction committed successfully.")
-	Group.CreatedAt = currentFormattedTime
+	Group.AdminID = adminID
+	Group.Name = input.Name
 	return &Group, nil
 }
 
@@ -116,7 +114,7 @@ func (r *mutationResolver) CreateGroup(ctx context.Context, input model.NewGroup
 func (r *mutationResolver) AddGroupMembers(ctx context.Context, input model.GroupMembersInput) (bool, error) {
 	adminID := ctx.Value(auth.UserCtxKey).(string)
 	db := dal.GetDB()
-	err := CheckUserIsAdminOfGroup(db, adminID, input.GroupID)
+	err := checkUserIsAdminOfGroup(db, adminID, input.GroupID)
 	if err != nil {
 		return false, fmt.Errorf("user is not admin group")
 	}
@@ -127,7 +125,7 @@ func (r *mutationResolver) AddGroupMembers(ctx context.Context, input model.Grou
 	defer tx.Rollback()
 
 	for i, _ := range input.MemberID {
-		_, err = tx.Exec("INSERT INTO public.group_members (group_id, member_id) VALUES ($1, $2)", input.GroupID, input.MemberID[i])
+		_, err = tx.Exec("UPSERT INTO public.group_members (group_id, member_id, is_removed, removed_at) values ($1, $2, false, null);", input.GroupID, input.MemberID[i])
 		if err != nil {
 			return false, err
 		}
@@ -144,7 +142,7 @@ func (r *mutationResolver) AddGroupMembers(ctx context.Context, input model.Grou
 func (r *mutationResolver) RemoveGroupMembers(ctx context.Context, input model.GroupMembersInput) (bool, error) {
 	adminID := ctx.Value(auth.UserCtxKey).(string)
 	db := dal.GetDB()
-	err := CheckUserIsAdminOfGroup(db, adminID, input.GroupID)
+	err := checkUserIsAdminOfGroup(db, adminID, input.GroupID)
 	if err != nil {
 		return false, fmt.Errorf("user is not admin group")
 	}
@@ -190,7 +188,10 @@ func (r *mutationResolver) DeleteGroupConversation(ctx context.Context, input mo
 	var removedFromGroup bool
 	errIfNoRows := db.QueryRow(
 		"SELECT is_removed FROM public.group_members where member_id=$1 and group_id=$2;", senderID, input.GroupID).Scan(&removedFromGroup)
-	if errIfNoRows != nil || removedFromGroup {
+	if errIfNoRows != nil {
+		return false, fmt.Errorf("user is not member of group")
+	}
+	if removedFromGroup {
 		return false, fmt.Errorf("user is no more member of group")
 	}
 	result, err := db.Exec("DELETE FROM public.group_conversations WHERE sender_id=$1 AND id=$2;", senderID, input.MessageID)
@@ -202,6 +203,44 @@ func (r *mutationResolver) DeleteGroupConversation(ctx context.Context, input mo
 		return false, fmt.Errorf("wrong data")
 	}
 	return true, nil
+}
+
+// GroupDetails is the resolver for the GroupDetails field.
+func (r *queryResolver) GroupDetails(ctx context.Context, groupID string) (*model.GroupDetails, error) {
+	memberID := ctx.Value(auth.UserCtxKey).(string)
+	db := dal.GetDB()
+
+	var GroupDetails model.GroupDetails
+	errIfNoRows := db.QueryRow(
+		"SELECT name, admin_id, created_at FROM public.groups where id=$1;", groupID).Scan(&GroupDetails.Name, &GroupDetails.AdminID, &GroupDetails.CreatedAt)
+	if errIfNoRows != nil {
+		return nil, errIfNoRows
+	}
+	var removedFromGroup bool
+	errIfNoRows = db.QueryRow(
+		"SELECT is_removed FROM public.group_members where member_id=$1 and group_id=$2;", memberID, groupID).Scan(&removedFromGroup)
+	if errIfNoRows != nil {
+		return nil, fmt.Errorf("user is not member of group")
+	}
+	GroupDetails.GroupID = groupID
+	if removedFromGroup {
+		return &GroupDetails, nil
+	}
+	rows, err := db.Query("Select member_id, is_removed, removed_at FROM public.group_members WHERE group_id=$1;", groupID)
+	if err != nil {
+		return nil, err
+	}
+	var GroupMembersDetails []*model.GroupMemberDetails
+	for rows.Next() {
+		var GroupMemberDetails model.GroupMemberDetails
+		err = rows.Scan(&GroupMemberDetails.MemberID, &GroupMemberDetails.IsRemoved, &GroupMemberDetails.RemovedAt)
+		if err != nil {
+			return nil, err
+		}
+		GroupMembersDetails = append(GroupMembersDetails, &GroupMemberDetails)
+	}
+	GroupDetails.GroupMembers = GroupMembersDetails
+	return &GroupDetails, nil
 }
 
 // UserList is the resolver for the UserList field.
@@ -222,7 +261,7 @@ func (r *queryResolver) UserList(ctx context.Context, input *model.UserListInput
 	if len(where) > 0 {
 		whereKeyword = "WHERE"
 	}
-	query := fmt.Sprintf("SELECT id, fullname FROM users %s %v limit %d offset %d", whereKeyword, strings.Join(where, " AND "), *input.Limit, offset)
+	query := fmt.Sprintf("SELECT id, fullname, email, ip_address, gender FROM users %s %v order by fullname asc limit %d offset %d", whereKeyword, strings.Join(where, " AND "), *input.Limit, offset)
 	query = sqlx.Rebind(sqlx.DOLLAR, query)
 	rows, err := db.Query(query, filterArgsList...)
 	if err != nil {
@@ -279,16 +318,16 @@ func (r *queryResolver) GroupConversationRecords(ctx context.Context, limit *int
 	db := dal.GetDB()
 	UserID := ctx.Value(auth.UserCtxKey).(string)
 	var removedFromGroup bool
-	var removed_at string
+	var removedAt *string
 	errIfNoRows := db.QueryRow(
-		"SELECT is_removed,removed_at FROM public.group_members where member_id=$1 and group_id=$2;", UserID, groupID).Scan(&removedFromGroup, &removed_at)
+		"SELECT is_removed,removed_at FROM public.group_members where member_id=$1 and group_id=$2;", UserID, groupID).Scan(&removedFromGroup, &removedAt)
 	if errIfNoRows != nil {
-		return nil, fmt.Errorf("user has not access of group")
+		return nil, fmt.Errorf("wrong data")
 	}
 	var rows *sql.Rows
 	var err error
 	if removedFromGroup {
-		rows, err = db.Query("select id, sender_id, content, created_at from public.group_conversations where group_id = $1 and created_at = $2 order by created_at desc limit $3 offset $4 ", groupID, removed_at, limit, offset)
+		rows, err = db.Query("select id, sender_id, content, created_at from public.group_conversations where group_id = $1 and created_at < $2 order by created_at desc limit $3 offset $4 ", groupID, *removedAt, limit, offset)
 	} else {
 		rows, err = db.Query("select id, sender_id, content, created_at from public.group_conversations where group_id = $1 order by created_at desc limit $2 offset $3 ", groupID, limit, offset)
 	}
@@ -370,7 +409,7 @@ func (r *queryResolver) RecentConversationList(ctx context.Context, limit *int, 
 	var ConversationList []*model.ConversationList
 	for rows.Next() {
 		var Conversation model.ConversationList
-		err = rows.Scan(&Conversation.ConversationID, &Conversation.LastMessageTime, &Conversation.IsItGroup)
+		err = rows.Scan(&Conversation.LastMessageTime, &Conversation.ConversationID, &Conversation.IsItGroup)
 		if err != nil {
 			return nil, err
 		}
@@ -383,6 +422,7 @@ func (r *queryResolver) RecentConversationList(ctx context.Context, limit *int, 
 func (r *subscriptionResolver) PersonalConversationPublished(ctx context.Context, input model.PersonalConversationPublishedInput) (<-chan *model.PersonalConversation, error) {
 	id := randx.String(8)
 	// fmt.Println(id)
+	// printAllocatedMemory()
 	personalConversationEvent := make(chan *model.PersonalConversation, 1)
 	go func() {
 		<-ctx.Done()
@@ -390,19 +430,34 @@ func (r *subscriptionResolver) PersonalConversationPublished(ctx context.Context
 	}()
 	senderAndReceiverMap[id] = map[string]string{"senderID": input.SenderID, "receiverID": input.ReceiverID}
 	personalConversationPublishedChannelMap[id] = personalConversationEvent
+	// fmt.Println("after allocating variable")
+
+	// printAllocatedMemory()
+	// runtime.KeepAlive(senderAndReceiverMap) // Keeps a reference to m so that the map isn’t collected
 	return personalConversationEvent, nil
 }
 
 // GroupConversationPublished is the resolver for the groupConversationPublished field.
 func (r *subscriptionResolver) GroupConversationPublished(ctx context.Context, input model.GroupConversationPublishedInput) (<-chan *model.GroupConversation, error) {
+	db := dal.GetDB()
+	var removedFromGroup bool
+	errIfNoRows := db.QueryRow(
+		"SELECT is_removed FROM public.group_members where member_id=$1 and group_id=$2;", input.MemberID, input.GroupID).Scan(&removedFromGroup)
+	if errIfNoRows != nil {
+		return nil, fmt.Errorf("wrong data")
+	}
+	if removedFromGroup {
+		return nil, fmt.Errorf("user is no more member of group")
+	}
 	id := randx.String(8)
 	// fmt.Println(id)
+	fmt.Println("GroupConversationPublished running")
 	groupConversationEvent := make(chan *model.GroupConversation, 1)
 	go func() {
 		<-ctx.Done()
 		defer clearSubscriptionVariablesOfGroupConversation(id)
 	}()
-	groupAndMemberMap[id] = map[string]string{"groupID": input.GroupID, "memberID": input.MemberID}
+	groupAndMemberMap[id] = map[string]string{"groupID": input.GroupID}
 	groupConversationPublishedChannelMap[id] = groupConversationEvent
 	return groupConversationEvent, nil
 }
@@ -436,14 +491,14 @@ func init() {
 	personalConversationPublishedChannelMap = map[string]chan *model.PersonalConversation{}
 	groupConversationPublishedChannelMap = map[string]chan *model.GroupConversation{}
 }
-func (r *queryResolver) UserIDByName(ctx context.Context, name *string) (string, error) {
+func (r *queryResolver) UserNameByID(ctx context.Context, UserID *string) (string, error) {
 	db := dal.GetDB()
-	var UserID string
-	errIfNoRows := db.QueryRow("select id from public.users where fullname=$1", name).Scan(&UserID)
+	var name string
+	errIfNoRows := db.QueryRow("select fullname from public.users where id=$1", UserID).Scan(&name)
 	if errIfNoRows == nil {
-		return UserID, nil
+		return name, nil
 	}
-	return "", fmt.Errorf("no user found with that name")
+	return "", fmt.Errorf("no user found with that id")
 }
 
 type contextKey string
@@ -456,57 +511,15 @@ func clearSubscriptionVariablesOfPersonalConversation(id string) {
 	delete(senderAndReceiverMap, id)
 	delete(personalConversationPublishedChannelMap, id)
 }
-
 func clearSubscriptionVariablesOfGroupConversation(id string) {
 	delete(groupAndMemberMap, id)
 	delete(groupConversationPublishedChannelMap, id)
 }
-func NewRootResolvers() Config {
-	c := Config{
-		Resolvers: &Resolver{},
-	}
-	// Complexity
-	// Schema Directive
-	c.Directives.IsAuthenticated = func(ctx context.Context, obj interface{}, next graphql.Resolver) (res interface{}, err error) {
-		authorizationKey := ctx.Value(auth.UserCtxKey).(string)
-		fmt.Println("Authorization key:" + authorizationKey)
-		if authorizationKey != "" {
-			fmt.Println("with autho")
-			ok, errorMessage := ValidateUserByAuthorizationKey(authorizationKey)
-			if ok {
-				return next(ctx)
-			} else {
-				return nil, errors.New(errorMessage)
-			}
-		} else {
-			fmt.Println("no autho")
-			return nil, errors.New("no authorization key")
-		}
-	}
-	return c
-}
-func ValidateUserByAuthorizationKey(id string) (bool, string) {
-	db := dal.GetDB()
-	rows, err := db.Query("select id from public.users where id=$1", id)
-	if err != nil {
-		return false, "internal server error"
-	}
-	i := 0
-	for rows.Next() {
-		i += 1
-	}
-	defer rows.Close()
-	if i == 0 {
-		return false, "invalid authorization key"
-	}
-	return true, ""
-}
-func CheckUserIsAdminOfGroup(db *sql.DB, adminID string, groupID string) error {
+func checkUserIsAdminOfGroup(db *sql.DB, adminID string, groupID string) error {
 	errIfNoRows := db.QueryRow("select admin_id from public.groups where admin_id = $1 and id = $2;", adminID, groupID).Scan(&adminID)
 	fmt.Println(adminID, groupID)
 	return errIfNoRows
 }
-
 func currentFormattedTime() string {
 	currentTime := time.Now()
 	outputFormat := "2006-01-02 15:04:05-07:00"

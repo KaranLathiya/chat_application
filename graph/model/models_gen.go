@@ -33,6 +33,20 @@ type GroupConversationPublishedInput struct {
 	MemberID string `json:"memberId"`
 }
 
+type GroupDetails struct {
+	GroupID      string                `json:"groupId"`
+	Name         string                `json:"name"`
+	AdminID      string                `json:"adminId"`
+	CreatedAt    string                `json:"createdAt"`
+	GroupMembers []*GroupMemberDetails `json:"groupMembers"`
+}
+
+type GroupMemberDetails struct {
+	MemberID  string  `json:"memberId"`
+	IsRemoved bool    `json:"isRemoved"`
+	RemovedAt *string `json:"removedAt,omitempty"`
+}
+
 type GroupMembersInput struct {
 	GroupID  string   `json:"groupId"`
 	MemberID []string `json:"memberId"`

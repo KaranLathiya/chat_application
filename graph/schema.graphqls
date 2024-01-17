@@ -23,7 +23,7 @@ type PersonalConversation {
     senderId: ID!
     receiverId: ID!
     content: String!
-    createdAt: Timestamp!
+    createdAt: TimestampWithTimeZone!
 }
 
 input NewPersonalConversation{
@@ -36,7 +36,7 @@ input NewGroup {
 }
 
 type ConversationList {
-    lastMessageTime: Timestamp!
+    lastMessageTime: TimestampWithTimeZone!
     conversationId: ID!
     isItGroup: Boolean!
 }
@@ -46,7 +46,21 @@ type GroupConversation {
     groupId: ID!
     senderId: ID!
     content: String!
-    createdAt: Timestamp!
+    createdAt: TimestampWithTimeZone!
+}
+
+type GroupDetails {
+    groupId: ID!
+    name: String!
+    adminId: ID!
+    createdAt:TimestampWithTimeZone!
+    groupMembers:[GroupMemberDetails!]!
+}
+
+type GroupMemberDetails {
+    memberId: ID!
+    isRemoved: Boolean!
+    removedAt: TimestampWithTimeZone
 }
 
 input NewGroupConversation {
@@ -82,6 +96,7 @@ type Mutation {
 }
 
 type Query {
+    GroupDetails(groupId:ID!): GroupDetails! @isAuthenticated
     UserList(input:UserListInput): [User!]! @isAuthenticated
     UserDetailsById : User! @isAuthenticated
     PersonalConversationRecords(limit: Int = 25, offset: Int = 0,receiverId: ID!): [PersonalConversation!]! @isAuthenticated
@@ -104,6 +119,6 @@ input GroupConversationPublishedInput{
     memberId : ID!
 }
 
-scalar Timestamp
+scalar TimestampWithTimeZone
 
 directive @isAuthenticated on FIELD_DEFINITION
