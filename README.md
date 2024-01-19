@@ -1,5 +1,5 @@
 
-# FitnessTracker
+# ChatApplication
 
 Chat application for real time personal and group conversation.
 
