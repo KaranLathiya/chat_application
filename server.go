@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -32,9 +33,9 @@ func main() {
 	defer db.Close()
 	fmt.Println("Server started")
 	router := chi.NewRouter()
-	
+
 	router.Use(auth.Middleware)
-	
+
 	// srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{},Directives: graph.DirectiveRoot{}}))
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.NewRootResolvers()))
 
@@ -42,6 +43,12 @@ func main() {
 	router.Handle("/query", srv)
 
 	log.Printf("connect to http://localhost:%s/ for GraphQL playground", port)
-	log.Fatal(http.ListenAndServe(":"+port, router))
+	// router.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
+	// router.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+	// router.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+	// router.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+	// router.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+	// router.Handle("/debug/pprof/{cmd}", http.HandlerFunc(pprof.Index)) // special handling for Gorilla mux
 
+	log.Fatal(http.ListenAndServe(":"+port, router))
 }

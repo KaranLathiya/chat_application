@@ -246,23 +246,30 @@ func (r *queryResolver) GroupDetails(ctx context.Context, groupID string) (*mode
 // UserList is the resolver for the UserList field.
 func (r *queryResolver) UserList(ctx context.Context, input *model.UserListInput) ([]*model.User, error) {
 	db := dal.GetDB()
-	offset := *input.Page * *input.Limit
-	var where []string
+	offset := (*input.Page - 1) * *input.Limit
+	var where, orderBy []string
 	var whereKeyword string
 	var filterArgsList []interface{}
-	if input.Name != nil {
+
+	if input.Name != nil && *input.Name != "" {
 		where = append(where, "fullname ILIKE '%' || ? || '%'")
 		filterArgsList = append(filterArgsList, *input.Name)
+		orderBy = append(orderBy, "position (LOWER('"+*input.Name+"') IN LOWER(fullname)) asc")
 	}
-	if input.Email != nil {
+	if input.Email != nil && *input.Email != ""{
 		where = append(where, "email ILIKE '%' || ? || '%'")
 		filterArgsList = append(filterArgsList, *input.Email)
+		orderBy = append(orderBy, "position (LOWER('"+*input.Email+"') IN LOWER(email)) asc")
 	}
 	if len(where) > 0 {
 		whereKeyword = "WHERE"
+	} else {
+		orderBy = append(orderBy, "fullname asc")
 	}
-	query := fmt.Sprintf("SELECT id, fullname, email, ip_address, gender FROM users %s %v order by fullname asc limit %d offset %d", whereKeyword, strings.Join(where, " AND "), *input.Limit, offset)
+	// fmt.Println(wh)
+	query := fmt.Sprintf("SELECT id, fullname, email, ip_address, gender FROM users %s %v ORDER BY %v limit %d offset %d", whereKeyword, strings.Join(where, " OR "), strings.Join(orderBy, " , "), *input.Limit, offset)
 	query = sqlx.Rebind(sqlx.DOLLAR, query)
+	fmt.Println(query)
 	rows, err := db.Query(query, filterArgsList...)
 	if err != nil {
 		return nil, err
