@@ -73,6 +73,14 @@ input GroupMembersInput {
     memberId: [ID!]!
 }
 
+input AddableMembersInGroupInput{
+    groupId: ID!
+    name: String 
+    email: String 
+    limit: Int = 15
+    page: Int = 1
+}
+
 input UserListInput{
     name: String 
     email: String 
@@ -98,7 +106,9 @@ type Mutation {
 type Query {
     GroupDetails(groupId:ID!): GroupDetails! @isAuthenticated
     UserList(input:UserListInput): [User!]! @isAuthenticated
-    UserDetailsById : User! @isAuthenticated
+    addableMembersInGroup(input:AddableMembersInGroupInput!): [User!]! @isAuthenticated
+    UserDetailsById(userId:ID!): User! @isAuthenticated
+    UserNameById(userId:ID!): String! @isAuthenticated
     PersonalConversationRecords(limit: Int = 25, offset: Int = 0,receiverId: ID!): [PersonalConversation!]! @isAuthenticated
     GroupConversationRecords(limit: Int = 25, offset: Int = 0,groupId: ID!): [GroupConversation!]! @isAuthenticated
     RecentConversationList(limit: Int = 25, offset: Int = 0): [ConversationList!]! @isAuthenticated

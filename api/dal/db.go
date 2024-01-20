@@ -38,20 +38,21 @@ func Connect() (*sql.DB, error) {
 	return db, err
 }
 
-func MustExec(query string, args ...interface{}) (int64, error) {
-	db = GetDB()
-	result, err := db.Exec(query, args...)
-	if err != nil {
-		return 0, err
-	}
-	RowsAffected, err := result.RowsAffected()
-	if err != nil {
-		fmt.Println("RowsAffected Error", err)
-		return 0, err
-	}
-	return RowsAffected, err
-
-}
 func GetDB() *sql.DB {
 	return db
 }
+
+// func MustExec(query string, args ...interface{}) (int64, error) {
+// 	db = GetDB()
+// 	result, err := db.Exec(query, args...)
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	RowsAffected, err := result.RowsAffected()
+// 	if err != nil {
+// 		fmt.Println("RowsAffected Error", err)
+// 		return 0, err
+// 	}
+// 	return RowsAffected, err
+// }
+

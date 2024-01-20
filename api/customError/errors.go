@@ -1,8 +1,7 @@
-package errors
+package customError
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/lib/pq"
@@ -35,35 +34,39 @@ func MessageShow(code int, message string, w http.ResponseWriter) {
 	w.Write(user_data)
 }
 
-func DatabaseErrorShow(err error) (string, int) {
+func DatabaseErrorShow(err error) string {
 	if dbErr, ok := err.(*pq.Error); ok { // For PostgreSQL database driver (pq)
 		// Access PostgreSQL-specific error fields
 		// errCode,_ :=  strconv.Atoi(dbErr.Code)
 		errCode := dbErr.Code
-		errMessage := errCode.Name()
-		errDetail := dbErr.Detail
+		// errMessage := errCode.Name()
+		// errDetail := dbErr.Detail
 		// Handle the PostgreSQL-specific error
-		fmt.Println(errCode)
-		fmt.Println(errDetail)
-		fmt.Println(errMessage)
+		// fmt.Println(errCode)
+		// fmt.Println(errDetail)
+		// fmt.Println(errMessage)
 		switch errCode {
+		case "22P02":
+			// not-null constraint violation
+			return "invalid_text_representation"
+
 		case "23502":
 			// not-null constraint violation
-			return "Some required data was left out", 400
+			return "Some required data was left out"
 
 		case "23503":
 			// foreign key violation
-			return "This record can't be changed because another record refers to it", 409
+			return "This record can't be changed because another record refers to it"
 
 		case "23505":
 			// unique constraint violation
-			return "This record contains duplicated data that conflicts with what is already in the database", 409
+			return "This record contains duplicated data that conflicts with what is already in the database"
 
 		case "23514":
 			// check constraint violation
-			return "This record contains inconsistent or out-of-range data", 400
+			return "This record contains inconsistent or out-of-range data"
 
 		}
 	}
-	return err.Error(), 401
+	return err.Error()
 }

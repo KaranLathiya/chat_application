@@ -2,6 +2,14 @@
 
 package model
 
+type AddableMembersInGroupInput struct {
+	GroupID string  `json:"groupId"`
+	Name    *string `json:"name,omitempty"`
+	Email   *string `json:"email,omitempty"`
+	Limit   *int    `json:"limit,omitempty"`
+	Page    *int    `json:"page,omitempty"`
+}
+
 type ConversationList struct {
 	LastMessageTime string `json:"lastMessageTime"`
 	ConversationID  string `json:"conversationId"`

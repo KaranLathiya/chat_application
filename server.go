@@ -2,8 +2,8 @@ package main
 
 import (
 	"chat_application/api/auth"
+	"chat_application/api/customError"
 	"chat_application/api/dal"
-	"chat_application/api/errors"
 	"chat_application/graph"
 	"fmt"
 	"log"
@@ -28,8 +28,9 @@ func main() {
 	if port == "" {
 		port = defaultPort
 	}
+
 	db, err := dal.Connect()
-	errors.CheckErr(err)
+	customError.CheckErr(err)
 	defer db.Close()
 	fmt.Println("Server started")
 	router := chi.NewRouter()

@@ -2,6 +2,7 @@ package graph
 
 import (
 	"chat_application/api/auth"
+	"chat_application/api/customError"
 	"chat_application/api/dal"
 	"context"
 	"errors"
@@ -45,7 +46,8 @@ func validateUserByAuthorizationKey(id string) (bool, string) {
 	db := dal.GetDB()
 	rows, err := db.Query("select id from public.users where id=$1", id)
 	if err != nil {
-		return false, "internal server error"
+		errMessage := customError.DatabaseErrorShow(err)
+		return false, errMessage
 	}
 	i := 0
 	for rows.Next() {
