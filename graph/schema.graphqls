@@ -5,7 +5,7 @@
 
 type User {
     id: ID!
-    fullname: String!
+    fullName: String!
     email: String!
     ipAddress: String!
     gender: String
@@ -54,6 +54,7 @@ type GroupDetails {
     name: String!
     adminId: ID!
     createdAt:TimestampWithTimeZone!
+    isRemoved: Boolean!
     groupMembers:[GroupMemberDetails!]!
 }
 
@@ -73,7 +74,7 @@ input GroupMembersInput {
     memberId: [ID!]!
 }
 
-input AddableMembersInGroupInput{
+input MembersListThatCanJoinTheGroupInput{
     groupId: ID!
     name: String 
     email: String 
@@ -93,6 +94,26 @@ input DeleteGroupConversationInput{
     messageId: ID!
 }
 
+input PersonalConversationPublishedInput{
+    senderId : ID!
+    receiverId : ID!
+}
+
+input GroupConversationPublishedInput{
+    groupId : ID!
+    memberId : ID!
+}
+
+input ChangeGroupAdminInput{
+    groupId : ID!
+    newAdminId : ID!
+}
+
+input ChangeGroupNameInput{
+    groupId : ID!
+    newGroupName : String!
+}
+
 type Mutation {
     createPersonalConversation(input: NewPersonalConversation!): PersonalConversation! @isAuthenticated
     createGroupConversation(input: NewGroupConversation!): GroupConversation! @isAuthenticated
@@ -101,12 +122,15 @@ type Mutation {
     removeGroupMembers (input:GroupMembersInput!): Boolean! @isAuthenticated
     deletePersonalConversation(messageId:ID!): Boolean! @isAuthenticated
     deleteGroupConversation(input:DeleteGroupConversationInput!): Boolean! @isAuthenticated
+    changeGroupAdmin(input:ChangeGroupAdminInput!): Boolean! @isAuthenticated
+    changeGroupName(input:ChangeGroupNameInput!): Boolean! @isAuthenticated
+    leaveGroup(groupId:ID!): Boolean! @isAuthenticated
 }
 
 type Query {
     GroupDetails(groupId:ID!): GroupDetails! @isAuthenticated
     UserList(input:UserListInput): [User!]! @isAuthenticated
-    addableMembersInGroup(input:AddableMembersInGroupInput!): [User!]! @isAuthenticated
+    MembersListThatCanJoinTheGroup(input:MembersListThatCanJoinTheGroupInput!): [User!]! @isAuthenticated
     UserDetailsById(userId:ID!): User! @isAuthenticated
     UserNameById(userId:ID!): String! @isAuthenticated
     PersonalConversationRecords(limit: Int = 25, offset: Int = 0,receiverId: ID!): [PersonalConversation!]! @isAuthenticated
@@ -117,16 +141,6 @@ type Query {
 type Subscription {
     personalConversationPublished(input:PersonalConversationPublishedInput!): PersonalConversation! 
     groupConversationPublished(input:GroupConversationPublishedInput!): GroupConversation! 
-}
-
-input PersonalConversationPublishedInput{
-    senderId : ID!
-    receiverId : ID!
-}
-
-input GroupConversationPublishedInput{
-    groupId : ID!
-    memberId : ID!
 }
 
 scalar TimestampWithTimeZone

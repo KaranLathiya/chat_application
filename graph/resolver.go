@@ -5,6 +5,7 @@ import (
 	"chat_application/api/customError"
 	"chat_application/api/dal"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -16,17 +17,21 @@ import (
 //
 // It serves as dependency injection for your app, add any dependencies you require here.
 
-type Resolver struct{}
+type Resolver struct {
+	// db *sql.DB
+}
 
-func NewRootResolvers() Config {
+func NewRootResolvers(db *sql.DB) Config {
 	c := Config{
-		Resolvers: &Resolver{},
+		Resolvers: &Resolver{
+			// db: db
+		},
 	}
 	// Complexity
 	// Schema Directive
 	c.Directives.IsAuthenticated = func(ctx context.Context, obj interface{}, next graphql.Resolver) (res interface{}, err error) {
 		authorizationKey := ctx.Value(auth.UserCtxKey).(string)
-		fmt.Println("Authorization key:" + authorizationKey)
+		// fmt.Println("Authorization key:" + authorizationKey)
 		if authorizationKey != "" {
 			fmt.Println("with autho")
 			ok, errorMessage := validateUserByAuthorizationKey(authorizationKey)

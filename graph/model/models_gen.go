@@ -2,12 +2,14 @@
 
 package model
 
-type AddableMembersInGroupInput struct {
-	GroupID string  `json:"groupId"`
-	Name    *string `json:"name,omitempty"`
-	Email   *string `json:"email,omitempty"`
-	Limit   *int    `json:"limit,omitempty"`
-	Page    *int    `json:"page,omitempty"`
+type ChangeGroupAdminInput struct {
+	GroupID    string `json:"groupId"`
+	NewAdminID string `json:"newAdminId"`
+}
+
+type ChangeGroupNameInput struct {
+	GroupID      string `json:"groupId"`
+	NewGroupName string `json:"newGroupName"`
 }
 
 type ConversationList struct {
@@ -46,6 +48,7 @@ type GroupDetails struct {
 	Name         string                `json:"name"`
 	AdminID      string                `json:"adminId"`
 	CreatedAt    string                `json:"createdAt"`
+	IsRemoved    bool                  `json:"isRemoved"`
 	GroupMembers []*GroupMemberDetails `json:"groupMembers"`
 }
 
@@ -58,6 +61,14 @@ type GroupMemberDetails struct {
 type GroupMembersInput struct {
 	GroupID  string   `json:"groupId"`
 	MemberID []string `json:"memberId"`
+}
+
+type MembersListThatCanJoinTheGroupInput struct {
+	GroupID string  `json:"groupId"`
+	Name    *string `json:"name,omitempty"`
+	Email   *string `json:"email,omitempty"`
+	Limit   *int    `json:"limit,omitempty"`
+	Page    *int    `json:"page,omitempty"`
 }
 
 type Mutation struct {
@@ -98,7 +109,7 @@ type Subscription struct {
 
 type User struct {
 	ID        string  `json:"id"`
-	Fullname  string  `json:"fullname"`
+	FullName  string  `json:"fullName"`
 	Email     string  `json:"email"`
 	IPAddress string  `json:"ipAddress"`
 	Gender    *string `json:"gender,omitempty"`

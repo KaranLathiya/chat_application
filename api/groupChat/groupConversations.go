@@ -20,7 +20,7 @@ var groupAndMemberMap = make(map[string]map[string]string)
 var groupConversationPublishedChannelMap map[string]chan *model.GroupConversation
 
 func CreateGroupConversation(ctx context.Context, input model.NewGroupConversation) (*model.GroupConversation, error) {
-	var GroupConversation model.GroupConversation
+	var groupConversation model.GroupConversation
 	db := dal.GetDB()
 	senderID := ctx.Value(auth.UserCtxKey).(string)
 	var removedFromGroup bool
@@ -34,31 +34,31 @@ func CreateGroupConversation(ctx context.Context, input model.NewGroupConversati
 	}
 	currentFormattedTime := chatCommon.CurrentTimeConvertToCurrentFormattedTime()
 	errIfNoRows = db.QueryRow(
-		"INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id, created_at;", input.GroupID, senderID, input.Content, currentFormattedTime).Scan(&GroupConversation.ID, &GroupConversation.CreatedAt)
+		"INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id, created_at;", input.GroupID, senderID, input.Content, currentFormattedTime).Scan(&groupConversation.ID, &groupConversation.CreatedAt)
 	if errIfNoRows == nil {
-		GroupConversation.SenderID = senderID
-		GroupConversation.GroupID = input.GroupID
-		GroupConversation.Content = input.Content
+		groupConversation.SenderID = senderID
+		groupConversation.GroupID = input.GroupID
+		groupConversation.Content = input.Content
 		go func() {
 			for id, _ := range groupAndMemberMap {
 				fmt.Println("sub running")
 				if groupAndMemberMap[id]["groupID"] == input.GroupID {
-					groupConversationPublishedChannelMap[id] <- &GroupConversation
+					groupConversationPublishedChannelMap[id] <- &groupConversation
 				}
 			}
 		}()
-		return &GroupConversation, nil
+		return &groupConversation, nil
 	}
 	return nil, errIfNoRows
 }
 
 func GroupConversationRecords(ctx context.Context, limit *int, offset *int, groupID string) ([]*model.GroupConversation, error) {
 	db := dal.GetDB()
-	UserID := ctx.Value(auth.UserCtxKey).(string)
+	userID := ctx.Value(auth.UserCtxKey).(string)
 	var removedFromGroup bool
 	var removedAt *string
 	errIfNoRows := db.QueryRow(
-		"SELECT is_removed,removed_at FROM public.group_members WHERE member_id=$1 AND group_id=$2;", UserID, groupID).Scan(&removedFromGroup, &removedAt)
+		"SELECT is_removed,removed_at FROM public.group_members WHERE member_id=$1 AND group_id=$2;", userID, groupID).Scan(&removedFromGroup, &removedAt)
 	if errIfNoRows != nil {
 		return nil, fmt.Errorf("invalid groupid or memberid")
 	}
@@ -72,17 +72,17 @@ func GroupConversationRecords(ctx context.Context, limit *int, offset *int, grou
 	if err != nil {
 		return nil, err
 	}
-	var GroupConversations []*model.GroupConversation
+	var groupConversations []*model.GroupConversation
 	for rows.Next() {
-		var GroupConversation model.GroupConversation
-		GroupConversation.GroupID = groupID
-		err = rows.Scan(&GroupConversation.ID, &GroupConversation.SenderID, &GroupConversation.Content, &GroupConversation.CreatedAt)
+		var groupConversation model.GroupConversation
+		groupConversation.GroupID = groupID
+		err = rows.Scan(&groupConversation.ID, &groupConversation.SenderID, &groupConversation.Content, &groupConversation.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
-		GroupConversations = append(GroupConversations, &GroupConversation)
+		groupConversations = append(groupConversations, &groupConversation)
 	}
-	return GroupConversations, nil
+	return groupConversations, nil
 }
 
 func DeleteGroupConversation(ctx context.Context, input model.DeleteGroupConversationInput) (bool, error) {

@@ -36,26 +36,26 @@ func UserList(ctx context.Context, input *model.UserListInput) ([]*model.User, e
 	// fmt.Println(wh)
 	query := fmt.Sprintf("SELECT id, fullname, email, ip_address, gender FROM public.users %s %v ORDER BY %v LIMIT %d OFFSET %d", whereKeyword, strings.Join(where, " OR "), strings.Join(orderBy, " , "), *input.Limit, offset)
 	query = sqlx.Rebind(sqlx.DOLLAR, query)
-	fmt.Println(query)
+	// fmt.Println(query)
 	rows, err := db.Query(query, filterArgsList...)
 	if err != nil {
 		return nil, err
 	}
-	var Users []*model.User
+	var users []*model.User
 	for rows.Next() {
-		var User model.User
-		err = rows.Scan(&User.ID, &User.Fullname, &User.Email, &User.IPAddress, &User.Gender)
+		var user model.User
+		err = rows.Scan(&user.ID, &user.FullName, &user.Email, &user.IPAddress, &user.Gender)
 		if err != nil {
 			return nil, err
 		}
-		Users = append(Users, &User)
+		users = append(users, &user)
 	}
-	return Users, nil
+	return users, nil
 }
 
 func RecentConversationList(ctx context.Context, limit *int, offset *int) ([]*model.ConversationList, error) {
 	db := dal.GetDB()
-	UserID := ctx.Value(auth.UserCtxKey).(string)
+	userID := ctx.Value(auth.UserCtxKey).(string)
 	rows, err := db.Query(
 		`
 		SELECT
@@ -107,32 +107,31 @@ func RecentConversationList(ctx context.Context, limit *int, offset *int) ([]*mo
 		)
 		ORDER BY
 			last_message_time DESC
-		LIMIT $2 OFFSET $3;`, UserID, limit, offset)
+		LIMIT $2 OFFSET $3;`, userID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
-	var ConversationList []*model.ConversationList
+	var conversationList []*model.ConversationList
 	for rows.Next() {
-		var Conversation model.ConversationList
-		err = rows.Scan(&Conversation.LastMessageTime, &Conversation.ConversationID, &Conversation.IsItGroup)
+		var conversation model.ConversationList
+		err = rows.Scan(&conversation.LastMessageTime, &conversation.ConversationID, &conversation.IsItGroup)
 		if err != nil {
 			return nil, err
 		}
-		ConversationList = append(ConversationList, &Conversation)
+		conversationList = append(conversationList, &conversation)
 	}
-	return ConversationList, nil
+	return conversationList, nil
 }
 
 func UserDetailsByID(ctx context.Context, userID string) (*model.User, error) {
 	db := dal.GetDB()
-	id := ctx.Value(auth.UserCtxKey).(string)
-	var User model.User
-	errIfNoRows := db.QueryRow("SELECT fullname, email, ip_address, gender FROM public.users WHERE id=$1", id).Scan(&User.Fullname, &User.Email, &User.IPAddress, &User.Gender)
+	var user model.User
+	errIfNoRows := db.QueryRow("SELECT fullname, email, ip_address, gender FROM public.users WHERE id=$1", userID).Scan(&user.FullName, &user.Email, &user.IPAddress, &user.Gender)
 	if errIfNoRows == nil {
-		User.ID = id
-		return &User, nil
+		user.ID = userID 
+		return &user, nil
 	}
-	return &User, errIfNoRows
+	return &user, errIfNoRows
 }
 
 func UserNameByID(ctx context.Context, userID string) (string, error) {

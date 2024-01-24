@@ -26,39 +26,39 @@ func PersonalConversationRecords(ctx context.Context, limit *int, offset *int, r
 	if err != nil {
 		return nil, err
 	}
-	var PersonalConversations []*model.PersonalConversation
+	var personalConversations []*model.PersonalConversation
 	for rows.Next() {
-		var PersonalConversation model.PersonalConversation
-		err = rows.Scan(&PersonalConversation.SenderID, &PersonalConversation.ReceiverID, &PersonalConversation.Content, &PersonalConversation.CreatedAt, &PersonalConversation.ID)
+		var personalConversation model.PersonalConversation
+		err = rows.Scan(&personalConversation.SenderID, &personalConversation.ReceiverID, &personalConversation.Content, &personalConversation.CreatedAt, &personalConversation.ID)
 		if err != nil {
 			return nil, err
 		}
-		PersonalConversations = append(PersonalConversations, &PersonalConversation)
+		personalConversations = append(personalConversations, &personalConversation)
 	}
-	return PersonalConversations, nil
+	return personalConversations, nil
 }
 
 func CreatePersonalConversation(ctx context.Context, input model.NewPersonalConversation) (*model.PersonalConversation, error) {
-	var PersonalConversation model.PersonalConversation
+	var personalConversation model.PersonalConversation
 	db := dal.GetDB()
 	senderID := ctx.Value(auth.UserCtxKey).(string)
 	currentFormattedTime := chatCommon.CurrentTimeConvertToCurrentFormattedTime()
 	errIfNoRows := db.QueryRow(
-		"INSERT INTO public.personal_conversations( sender_id, receiver_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id, created_at;", senderID, input.ReceiverID, input.Content, currentFormattedTime).Scan(&PersonalConversation.ID, &PersonalConversation.CreatedAt)
+		"INSERT INTO public.personal_conversations( sender_id, receiver_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id, created_at;", senderID, input.ReceiverID, input.Content, currentFormattedTime).Scan(&personalConversation.ID, &personalConversation.CreatedAt)
 	if errIfNoRows == nil {
-		PersonalConversation.SenderID = senderID
-		PersonalConversation.ReceiverID = input.ReceiverID
-		PersonalConversation.Content = input.Content
+		personalConversation.SenderID = senderID
+		personalConversation.ReceiverID = input.ReceiverID
+		personalConversation.Content = input.Content
 		go func() {
 			for id, _ := range senderAndReceiverMap {
 				fmt.Println("sub running")
 				if (senderAndReceiverMap[id]["senderID"] == senderID && senderAndReceiverMap[id]["receiverID"] == input.ReceiverID) || (senderAndReceiverMap[id]["senderID"] == input.ReceiverID && senderAndReceiverMap[id]["receiverID"] == senderID) {
 					fmt.Println("sender and receiver varified")
-					personalConversationPublishedChannelMap[id] <- &PersonalConversation
+					personalConversationPublishedChannelMap[id] <- &personalConversation
 				}
 			}
 		}()
-		return &PersonalConversation, nil
+		return &personalConversation, nil
 	}
 	return nil, errIfNoRows
 }
@@ -88,7 +88,7 @@ func PersonalConversationPublished(ctx context.Context, input model.PersonalConv
 	}()
 	senderAndReceiverMap[id] = map[string]string{"senderID": input.SenderID, "receiverID": input.ReceiverID}
 	personalConversationPublishedChannelMap[id] = personalConversationEvent
-	// fmt.Println("after allocating variable")
+	// fmt.Println("after allocating variable"p
 
 	// printAllocatedMemory()
 	// runtime.KeepAlive(senderAndReceiverMap) // Keeps a reference to m so that the map isn’t collected

@@ -52,6 +52,21 @@ func (r *mutationResolver) DeleteGroupConversation(ctx context.Context, input mo
 	return groupChat.DeleteGroupConversation(ctx, input)
 }
 
+// ChangeGroupAdmin is the resolver for the changeGroupAdmin field.
+func (r *mutationResolver) ChangeGroupAdmin(ctx context.Context, input model.ChangeGroupAdminInput) (bool, error) {
+	return groupChat.ChangeGroupAdmin(ctx, input)
+}
+
+// ChangeGroupName is the resolver for the changeGroupName field.
+func (r *mutationResolver) ChangeGroupName(ctx context.Context, input model.ChangeGroupNameInput) (bool, error) {
+	return groupChat.ChangeGroupName(ctx, input)
+}
+
+// LeaveGroup is the resolver for the leaveGroup field.
+func (r *mutationResolver) LeaveGroup(ctx context.Context, groupID string) (bool, error) {
+	return groupChat.LeaveGroup(ctx, groupID)
+}
+
 // GroupDetails is the resolver for the GroupDetails field.
 func (r *queryResolver) GroupDetails(ctx context.Context, groupID string) (*model.GroupDetails, error) {
 	return groupChat.GroupDetails(ctx, groupID)
@@ -62,9 +77,9 @@ func (r *queryResolver) UserList(ctx context.Context, input *model.UserListInput
 	return user.UserList(ctx, input)
 }
 
-// AddableMembersInGroup is the resolver for the addableMembersInGroup field.
-func (r *queryResolver) AddableMembersInGroup(ctx context.Context, input model.AddableMembersInGroupInput) ([]*model.User, error) {
-	return groupChat.AddableMembersInGroup(ctx, input)
+// MembersListThatCanJoinTheGroup is the resolver for the MembersListThatCanJoinTheGroup field.
+func (r *queryResolver) MembersListThatCanJoinTheGroup(ctx context.Context, input model.MembersListThatCanJoinTheGroupInput) ([]*model.User, error) {
+	return groupChat.MembersListThatCanJoinTheGroup(ctx, input)
 }
 
 // UserDetailsByID is the resolver for the UserDetailsByID field.
@@ -118,10 +133,3 @@ type groupDetailsResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
-
-// !!! WARNING !!!
-// The code below was going to be deleted when updating resolvers. It has been copied here so you have
-// one last chance to move it out of harms way if you want. There are two reasons this happens:
-//   - When renaming or deleting a resolver the old code will be put in here. You can safely delete
-//     it when you're done.
-//   - You have helper methods in this file. Move them out to keep these resolver files clean.

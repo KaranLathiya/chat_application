@@ -16,17 +16,17 @@ func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("in middleware")
 		handleCORS(w,r)
-		AuthorizationKey := r.Header.Get("Authorization")
-		fmt.Println("Authorization key:"+AuthorizationKey)
-
+		authorizationKey := r.Header.Get("Authorization")
+		fmt.Println("Authorization key:"+authorizationKey)
+		
 		// Allow unauthenticated users in
-		if AuthorizationKey == "" {
+		if authorizationKey == "" {
 			ctx := context.WithValue(r.Context(), UserCtxKey, "")
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), UserCtxKey, AuthorizationKey)
+		ctx := context.WithValue(r.Context(), UserCtxKey, authorizationKey)
 
 		// and call the next with our new context
 		next.ServeHTTP(w, r.WithContext(ctx))

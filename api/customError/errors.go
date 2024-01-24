@@ -47,8 +47,8 @@ func DatabaseErrorShow(err error) string {
 		// fmt.Println(errMessage)
 		switch errCode {
 		case "22P02":
-			// not-null constraint violation
-			return "invalid_text_representation"
+			// invalid_text_representation
+			return "invalid characters or invalid data format used"
 
 		case "23502":
 			// not-null constraint violation
