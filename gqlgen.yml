@@ -89,3 +89,7 @@ models:
     fields:
       groupMembers:
         resolver: true # force a resolver to be generated
+  GroupConversation:
+    fields:
+     sender:
+        resolver: true # force a resolver to be generated

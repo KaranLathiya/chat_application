@@ -11,11 +11,11 @@ import (
 	"github.com/markbates/going/randx"
 )
 
-func init() {
-	personalConversationPublishedChannelMap = map[string]chan *model.PersonalConversation{}
-}
+// func init() {
+// 	personalConversationPublishedChannelMap = map[string]chan *model.PersonalConversation{}
+// }
 
-var personalConversationPublishedChannelMap map[string]chan *model.PersonalConversation
+var personalConversationPublishedChannelMap = make(map[string]chan *model.PersonalConversation)
 var senderAndReceiverMap = make(map[string]map[string]string)
 
 func PersonalConversationRecords(ctx context.Context, limit *int, offset *int, receiverID string) ([]*model.PersonalConversation, error) {
@@ -77,7 +77,7 @@ func DeletePersonalConversation(ctx context.Context, messageID string) (bool, er
 	return true, nil
 }
 
-func PersonalConversationPublished(ctx context.Context, input model.PersonalConversationPublishedInput) (<-chan *model.PersonalConversation, error) {
+func PersonalConversationNotification(ctx context.Context, input model.PersonalConversationNotificationInput) (<-chan *model.PersonalConversation, error) {
 	id := randx.String(8)
 	// fmt.Println(id)
 	// printAllocatedMemory()

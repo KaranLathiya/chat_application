@@ -12,12 +12,12 @@ import (
 	"github.com/markbates/going/randx"
 )
 
-func init() {
-	groupConversationPublishedChannelMap = map[string]chan *model.GroupConversation{}
-}
+// func init() {
+// 	groupConversationPublishedChannelMap = map[string]chan *model.GroupConversation{}
+// }
 
 var groupAndMemberMap = make(map[string]map[string]string)
-var groupConversationPublishedChannelMap map[string]chan *model.GroupConversation
+var groupConversationPublishedChannelMap = make(map[string]chan *model.GroupConversation)
 
 func CreateGroupConversation(ctx context.Context, input model.NewGroupConversation) (*model.GroupConversation, error) {
 	var groupConversation model.GroupConversation
@@ -36,7 +36,7 @@ func CreateGroupConversation(ctx context.Context, input model.NewGroupConversati
 	errIfNoRows = db.QueryRow(
 		"INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id, created_at;", input.GroupID, senderID, input.Content, currentFormattedTime).Scan(&groupConversation.ID, &groupConversation.CreatedAt)
 	if errIfNoRows == nil {
-		groupConversation.SenderID = senderID
+		groupConversation.SenderID = &senderID
 		groupConversation.GroupID = input.GroupID
 		groupConversation.Content = input.Content
 		go func() {
@@ -108,7 +108,7 @@ func DeleteGroupConversation(ctx context.Context, input model.DeleteGroupConvers
 	return true, nil
 }
 
-func GroupConversationPublished(ctx context.Context, input model.GroupConversationPublishedInput) (<-chan *model.GroupConversation, error) {
+func GroupConversationNotification(ctx context.Context, input model.GroupConversationNotificationInput) (<-chan *model.GroupConversation, error) {
 	db := dal.GetDB()
 	var removedFromGroup bool
 	errIfNoRows := db.QueryRow(

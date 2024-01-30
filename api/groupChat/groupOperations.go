@@ -4,6 +4,7 @@ import (
 	"chat_application/api/auth"
 	"chat_application/api/chatCommon"
 	"chat_application/api/dal"
+	"chat_application/api/dataloader"
 	"chat_application/api/user"
 	"chat_application/graph/model"
 	"context"
@@ -313,7 +314,7 @@ func ChangeGroupName(ctx context.Context, input model.ChangeGroupNameInput) (boo
 	RowsAffected, _ := result.RowsAffected()
 	fmt.Println(RowsAffected)
 	if RowsAffected == 0 {
-		return false,fmt.Errorf("no change in group name")
+		return false, fmt.Errorf("no change in group name")
 	}
 	content := fmt.Sprintf("Group name changed to :- %s ", input.NewGroupName)
 	_, err = tx.Exec("INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4)", input.GroupID, adminID, content, currentFormattedTime)
@@ -363,6 +364,11 @@ func LeaveGroup(ctx context.Context, groupID string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func SenderDetails(ctx context.Context, obj *model.GroupConversation) (*model.Sender, error) {
+	user, err := ctx.Value(dataloader.CtxKey).(*dataloader.UserLoader).Load(*obj.SenderID)
+	return user, err
 }
 
 func checkUserIsAdminOfGroup(db *sql.DB, adminID string, groupID string) error {

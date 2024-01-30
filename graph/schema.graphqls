@@ -23,7 +23,7 @@ type PersonalConversation {
     senderId: ID!
     receiverId: ID!
     content: String!
-    createdAt: TimestampWithTimeZone!
+    createdAt: Timestamp!
 }
 
 input NewPersonalConversation{
@@ -36,24 +36,17 @@ input NewGroup {
 }
 
 type ConversationList {
-    lastMessageTime: TimestampWithTimeZone!
+    lastMessageTime: Timestamp!
     conversationId: ID!
     isItGroup: Boolean!
 }
 
-type GroupConversation {
-    id: ID!
-    groupId: ID!
-    senderId: ID!
-    content: String!
-    createdAt: TimestampWithTimeZone!
-}
 
 type GroupDetails {
     groupId: ID!
     name: String!
     adminId: ID!
-    createdAt:TimestampWithTimeZone!
+    createdAt:Timestamp!
     isRemoved: Boolean!
     groupMembers:[GroupMemberDetails!]!
 }
@@ -61,7 +54,7 @@ type GroupDetails {
 type GroupMemberDetails {
     memberId: ID!
     isRemoved: Boolean!
-    removedAt: TimestampWithTimeZone
+    removedAt: Timestamp
 }
 
 input NewGroupConversation {
@@ -94,12 +87,12 @@ input DeleteGroupConversationInput{
     messageId: ID!
 }
 
-input PersonalConversationPublishedInput{
+input PersonalConversationNotificationInput{
     senderId : ID!
     receiverId : ID!
 }
 
-input GroupConversationPublishedInput{
+input GroupConversationNotificationInput{
     groupId : ID!
     memberId : ID!
 }
@@ -112,6 +105,20 @@ input ChangeGroupAdminInput{
 input ChangeGroupNameInput{
     groupId : ID!
     newGroupName : String!
+}
+
+type GroupConversation {
+    id: ID!
+    groupId: ID!
+    content: String!
+    createdAt: Timestamp!
+    senderId: ID
+    sender: Sender!
+}
+
+type Sender {
+    name : String!
+    id: ID!
 }
 
 type Mutation {
@@ -139,10 +146,10 @@ type Query {
 }
 
 type Subscription {
-    personalConversationPublished(input:PersonalConversationPublishedInput!): PersonalConversation! 
-    groupConversationPublished(input:GroupConversationPublishedInput!): GroupConversation! 
+    personalConversationNotification(input:PersonalConversationNotificationInput!): PersonalConversation! 
+    groupConversationNotification(input:GroupConversationNotificationInput!): GroupConversation! 
 }
 
-scalar TimestampWithTimeZone
+scalar Timestamp
 
 directive @isAuthenticated on FIELD_DEFINITION

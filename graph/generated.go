@@ -40,6 +40,7 @@ type Config struct {
 }
 
 type ResolverRoot interface {
+	GroupConversation() GroupConversationResolver
 	GroupDetails() GroupDetailsResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
@@ -69,6 +70,7 @@ type ComplexityRoot struct {
 		CreatedAt func(childComplexity int) int
 		GroupID   func(childComplexity int) int
 		ID        func(childComplexity int) int
+		Sender    func(childComplexity int) int
 		SenderID  func(childComplexity int) int
 	}
 
@@ -119,9 +121,14 @@ type ComplexityRoot struct {
 		UserNameByID                   func(childComplexity int, userID string) int
 	}
 
+	Sender struct {
+		ID   func(childComplexity int) int
+		Name func(childComplexity int) int
+	}
+
 	Subscription struct {
-		GroupConversationPublished    func(childComplexity int, input model.GroupConversationPublishedInput) int
-		PersonalConversationPublished func(childComplexity int, input model.PersonalConversationPublishedInput) int
+		GroupConversationNotification    func(childComplexity int, input model.GroupConversationNotificationInput) int
+		PersonalConversationNotification func(childComplexity int, input model.PersonalConversationNotificationInput) int
 	}
 
 	User struct {
@@ -133,6 +140,9 @@ type ComplexityRoot struct {
 	}
 }
 
+type GroupConversationResolver interface {
+	Sender(ctx context.Context, obj *model.GroupConversation) (*model.Sender, error)
+}
 type GroupDetailsResolver interface {
 	GroupMembers(ctx context.Context, obj *model.GroupDetails) ([]*model.GroupMemberDetails, error)
 }
@@ -159,8 +169,8 @@ type QueryResolver interface {
 	RecentConversationList(ctx context.Context, limit *int, offset *int) ([]*model.ConversationList, error)
 }
 type SubscriptionResolver interface {
-	PersonalConversationPublished(ctx context.Context, input model.PersonalConversationPublishedInput) (<-chan *model.PersonalConversation, error)
-	GroupConversationPublished(ctx context.Context, input model.GroupConversationPublishedInput) (<-chan *model.GroupConversation, error)
+	PersonalConversationNotification(ctx context.Context, input model.PersonalConversationNotificationInput) (<-chan *model.PersonalConversation, error)
+	GroupConversationNotification(ctx context.Context, input model.GroupConversationNotificationInput) (<-chan *model.GroupConversation, error)
 }
 
 type executableSchema struct {
@@ -258,6 +268,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.GroupConversation.ID(childComplexity), true
+
+	case "GroupConversation.sender":
+		if e.complexity.GroupConversation.Sender == nil {
+			break
+		}
+
+		return e.complexity.GroupConversation.Sender(childComplexity), true
 
 	case "GroupConversation.senderId":
 		if e.complexity.GroupConversation.SenderID == nil {
@@ -580,29 +597,43 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Query.UserNameByID(childComplexity, args["userId"].(string)), true
 
-	case "Subscription.groupConversationPublished":
-		if e.complexity.Subscription.GroupConversationPublished == nil {
+	case "Sender.id":
+		if e.complexity.Sender.ID == nil {
 			break
 		}
 
-		args, err := ec.field_Subscription_groupConversationPublished_args(context.TODO(), rawArgs)
+		return e.complexity.Sender.ID(childComplexity), true
+
+	case "Sender.name":
+		if e.complexity.Sender.Name == nil {
+			break
+		}
+
+		return e.complexity.Sender.Name(childComplexity), true
+
+	case "Subscription.groupConversationNotification":
+		if e.complexity.Subscription.GroupConversationNotification == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_groupConversationNotification_args(context.TODO(), rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Subscription.GroupConversationPublished(childComplexity, args["input"].(model.GroupConversationPublishedInput)), true
+		return e.complexity.Subscription.GroupConversationNotification(childComplexity, args["input"].(model.GroupConversationNotificationInput)), true
 
-	case "Subscription.personalConversationPublished":
-		if e.complexity.Subscription.PersonalConversationPublished == nil {
+	case "Subscription.personalConversationNotification":
+		if e.complexity.Subscription.PersonalConversationNotification == nil {
 			break
 		}
 
-		args, err := ec.field_Subscription_personalConversationPublished_args(context.TODO(), rawArgs)
+		args, err := ec.field_Subscription_personalConversationNotification_args(context.TODO(), rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Subscription.PersonalConversationPublished(childComplexity, args["input"].(model.PersonalConversationPublishedInput)), true
+		return e.complexity.Subscription.PersonalConversationNotification(childComplexity, args["input"].(model.PersonalConversationNotificationInput)), true
 
 	case "User.email":
 		if e.complexity.User.Email == nil {
@@ -650,13 +681,13 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputChangeGroupAdminInput,
 		ec.unmarshalInputChangeGroupNameInput,
 		ec.unmarshalInputDeleteGroupConversationInput,
-		ec.unmarshalInputGroupConversationPublishedInput,
+		ec.unmarshalInputGroupConversationNotificationInput,
 		ec.unmarshalInputGroupMembersInput,
 		ec.unmarshalInputMembersListThatCanJoinTheGroupInput,
 		ec.unmarshalInputNewGroup,
 		ec.unmarshalInputNewGroupConversation,
 		ec.unmarshalInputNewPersonalConversation,
-		ec.unmarshalInputPersonalConversationPublishedInput,
+		ec.unmarshalInputPersonalConversationNotificationInput,
 		ec.unmarshalInputUserListInput,
 	)
 	first := true
@@ -1121,13 +1152,13 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
-func (ec *executionContext) field_Subscription_groupConversationPublished_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+func (ec *executionContext) field_Subscription_groupConversationNotification_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
-	var arg0 model.GroupConversationPublishedInput
+	var arg0 model.GroupConversationNotificationInput
 	if tmp, ok := rawArgs["input"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
-		arg0, err = ec.unmarshalNGroupConversationPublishedInput2chat_applicationᚋgraphᚋmodelᚐGroupConversationPublishedInput(ctx, tmp)
+		arg0, err = ec.unmarshalNGroupConversationNotificationInput2chat_applicationᚋgraphᚋmodelᚐGroupConversationNotificationInput(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1136,13 +1167,13 @@ func (ec *executionContext) field_Subscription_groupConversationPublished_args(c
 	return args, nil
 }
 
-func (ec *executionContext) field_Subscription_personalConversationPublished_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+func (ec *executionContext) field_Subscription_personalConversationNotification_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
-	var arg0 model.PersonalConversationPublishedInput
+	var arg0 model.PersonalConversationNotificationInput
 	if tmp, ok := rawArgs["input"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
-		arg0, err = ec.unmarshalNPersonalConversationPublishedInput2chat_applicationᚋgraphᚋmodelᚐPersonalConversationPublishedInput(ctx, tmp)
+		arg0, err = ec.unmarshalNPersonalConversationNotificationInput2chat_applicationᚋgraphᚋmodelᚐPersonalConversationNotificationInput(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1217,7 +1248,7 @@ func (ec *executionContext) _ConversationList_lastMessageTime(ctx context.Contex
 	}
 	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalNTimestampWithTimeZone2string(ctx, field.Selections, res)
+	return ec.marshalNTimestamp2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_ConversationList_lastMessageTime(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1227,7 +1258,7 @@ func (ec *executionContext) fieldContext_ConversationList_lastMessageTime(ctx co
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type TimestampWithTimeZone does not have child fields")
+			return nil, errors.New("field of type Timestamp does not have child fields")
 		},
 	}
 	return fc, nil
@@ -1585,50 +1616,6 @@ func (ec *executionContext) fieldContext_GroupConversation_groupId(ctx context.C
 	return fc, nil
 }
 
-func (ec *executionContext) _GroupConversation_senderId(ctx context.Context, field graphql.CollectedField, obj *model.GroupConversation) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_GroupConversation_senderId(ctx, field)
-	if err != nil {
-		return graphql.Null
-	}
-	ctx = graphql.WithFieldContext(ctx, fc)
-	defer func() {
-		if r := recover(); r != nil {
-			ec.Error(ctx, ec.Recover(ctx, r))
-			ret = graphql.Null
-		}
-	}()
-	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return obj.SenderID, nil
-	})
-	if err != nil {
-		ec.Error(ctx, err)
-		return graphql.Null
-	}
-	if resTmp == nil {
-		if !graphql.HasFieldError(ctx, fc) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return graphql.Null
-	}
-	res := resTmp.(string)
-	fc.Result = res
-	return ec.marshalNID2string(ctx, field.Selections, res)
-}
-
-func (ec *executionContext) fieldContext_GroupConversation_senderId(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "GroupConversation",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _GroupConversation_content(ctx context.Context, field graphql.CollectedField, obj *model.GroupConversation) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_GroupConversation_content(ctx, field)
 	if err != nil {
@@ -1701,7 +1688,7 @@ func (ec *executionContext) _GroupConversation_createdAt(ctx context.Context, fi
 	}
 	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalNTimestampWithTimeZone2string(ctx, field.Selections, res)
+	return ec.marshalNTimestamp2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_GroupConversation_createdAt(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1711,7 +1698,98 @@ func (ec *executionContext) fieldContext_GroupConversation_createdAt(ctx context
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type TimestampWithTimeZone does not have child fields")
+			return nil, errors.New("field of type Timestamp does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupConversation_senderId(ctx context.Context, field graphql.CollectedField, obj *model.GroupConversation) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_GroupConversation_senderId(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.SenderID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*string)
+	fc.Result = res
+	return ec.marshalOID2ᚖstring(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_GroupConversation_senderId(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupConversation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupConversation_sender(ctx context.Context, field graphql.CollectedField, obj *model.GroupConversation) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_GroupConversation_sender(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.GroupConversation().Sender(rctx, obj)
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.Sender)
+	fc.Result = res
+	return ec.marshalNSender2ᚖchat_applicationᚋgraphᚋmodelᚐSender(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_GroupConversation_sender(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupConversation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_Sender_name(ctx, field)
+			case "id":
+				return ec.fieldContext_Sender_id(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Sender", field.Name)
 		},
 	}
 	return fc, nil
@@ -1877,7 +1955,7 @@ func (ec *executionContext) _GroupDetails_createdAt(ctx context.Context, field g
 	}
 	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalNTimestampWithTimeZone2string(ctx, field.Selections, res)
+	return ec.marshalNTimestamp2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_GroupDetails_createdAt(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1887,7 +1965,7 @@ func (ec *executionContext) fieldContext_GroupDetails_createdAt(ctx context.Cont
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type TimestampWithTimeZone does not have child fields")
+			return nil, errors.New("field of type Timestamp does not have child fields")
 		},
 	}
 	return fc, nil
@@ -2102,7 +2180,7 @@ func (ec *executionContext) _GroupMemberDetails_removedAt(ctx context.Context, f
 	}
 	res := resTmp.(*string)
 	fc.Result = res
-	return ec.marshalOTimestampWithTimeZone2ᚖstring(ctx, field.Selections, res)
+	return ec.marshalOTimestamp2ᚖstring(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_GroupMemberDetails_removedAt(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2112,7 +2190,7 @@ func (ec *executionContext) fieldContext_GroupMemberDetails_removedAt(ctx contex
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type TimestampWithTimeZone does not have child fields")
+			return nil, errors.New("field of type Timestamp does not have child fields")
 		},
 	}
 	return fc, nil
@@ -2268,12 +2346,14 @@ func (ec *executionContext) fieldContext_Mutation_createGroupConversation(ctx co
 				return ec.fieldContext_GroupConversation_id(ctx, field)
 			case "groupId":
 				return ec.fieldContext_GroupConversation_groupId(ctx, field)
-			case "senderId":
-				return ec.fieldContext_GroupConversation_senderId(ctx, field)
 			case "content":
 				return ec.fieldContext_GroupConversation_content(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_GroupConversation_createdAt(ctx, field)
+			case "senderId":
+				return ec.fieldContext_GroupConversation_senderId(ctx, field)
+			case "sender":
+				return ec.fieldContext_GroupConversation_sender(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type GroupConversation", field.Name)
 		},
@@ -3106,7 +3186,7 @@ func (ec *executionContext) _PersonalConversation_createdAt(ctx context.Context,
 	}
 	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalNTimestampWithTimeZone2string(ctx, field.Selections, res)
+	return ec.marshalNTimestamp2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_PersonalConversation_createdAt(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3116,7 +3196,7 @@ func (ec *executionContext) fieldContext_PersonalConversation_createdAt(ctx cont
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type TimestampWithTimeZone does not have child fields")
+			return nil, errors.New("field of type Timestamp does not have child fields")
 		},
 	}
 	return fc, nil
@@ -3697,12 +3777,14 @@ func (ec *executionContext) fieldContext_Query_GroupConversationRecords(ctx cont
 				return ec.fieldContext_GroupConversation_id(ctx, field)
 			case "groupId":
 				return ec.fieldContext_GroupConversation_groupId(ctx, field)
-			case "senderId":
-				return ec.fieldContext_GroupConversation_senderId(ctx, field)
 			case "content":
 				return ec.fieldContext_GroupConversation_content(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_GroupConversation_createdAt(ctx, field)
+			case "senderId":
+				return ec.fieldContext_GroupConversation_senderId(ctx, field)
+			case "sender":
+				return ec.fieldContext_GroupConversation_sender(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type GroupConversation", field.Name)
 		},
@@ -3933,8 +4015,96 @@ func (ec *executionContext) fieldContext_Query___schema(ctx context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _Subscription_personalConversationPublished(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
-	fc, err := ec.fieldContext_Subscription_personalConversationPublished(ctx, field)
+func (ec *executionContext) _Sender_name(ctx context.Context, field graphql.CollectedField, obj *model.Sender) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Sender_name(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Name, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Sender_name(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Sender",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Sender_id(ctx context.Context, field graphql.CollectedField, obj *model.Sender) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Sender_id(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNID2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Sender_id(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Sender",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_personalConversationNotification(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	fc, err := ec.fieldContext_Subscription_personalConversationNotification(ctx, field)
 	if err != nil {
 		return nil
 	}
@@ -3947,7 +4117,7 @@ func (ec *executionContext) _Subscription_personalConversationPublished(ctx cont
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Subscription().PersonalConversationPublished(rctx, fc.Args["input"].(model.PersonalConversationPublishedInput))
+		return ec.resolvers.Subscription().PersonalConversationNotification(rctx, fc.Args["input"].(model.PersonalConversationNotificationInput))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -3978,7 +4148,7 @@ func (ec *executionContext) _Subscription_personalConversationPublished(ctx cont
 	}
 }
 
-func (ec *executionContext) fieldContext_Subscription_personalConversationPublished(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Subscription_personalConversationNotification(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Subscription",
 		Field:      field,
@@ -4007,15 +4177,15 @@ func (ec *executionContext) fieldContext_Subscription_personalConversationPublis
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_personalConversationPublished_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Subscription_personalConversationNotification_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _Subscription_groupConversationPublished(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
-	fc, err := ec.fieldContext_Subscription_groupConversationPublished(ctx, field)
+func (ec *executionContext) _Subscription_groupConversationNotification(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	fc, err := ec.fieldContext_Subscription_groupConversationNotification(ctx, field)
 	if err != nil {
 		return nil
 	}
@@ -4028,7 +4198,7 @@ func (ec *executionContext) _Subscription_groupConversationPublished(ctx context
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Subscription().GroupConversationPublished(rctx, fc.Args["input"].(model.GroupConversationPublishedInput))
+		return ec.resolvers.Subscription().GroupConversationNotification(rctx, fc.Args["input"].(model.GroupConversationNotificationInput))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -4059,7 +4229,7 @@ func (ec *executionContext) _Subscription_groupConversationPublished(ctx context
 	}
 }
 
-func (ec *executionContext) fieldContext_Subscription_groupConversationPublished(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Subscription_groupConversationNotification(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Subscription",
 		Field:      field,
@@ -4071,12 +4241,14 @@ func (ec *executionContext) fieldContext_Subscription_groupConversationPublished
 				return ec.fieldContext_GroupConversation_id(ctx, field)
 			case "groupId":
 				return ec.fieldContext_GroupConversation_groupId(ctx, field)
-			case "senderId":
-				return ec.fieldContext_GroupConversation_senderId(ctx, field)
 			case "content":
 				return ec.fieldContext_GroupConversation_content(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_GroupConversation_createdAt(ctx, field)
+			case "senderId":
+				return ec.fieldContext_GroupConversation_senderId(ctx, field)
+			case "sender":
+				return ec.fieldContext_GroupConversation_sender(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type GroupConversation", field.Name)
 		},
@@ -4088,7 +4260,7 @@ func (ec *executionContext) fieldContext_Subscription_groupConversationPublished
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_groupConversationPublished_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Subscription_groupConversationNotification_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -6187,8 +6359,8 @@ func (ec *executionContext) unmarshalInputDeleteGroupConversationInput(ctx conte
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputGroupConversationPublishedInput(ctx context.Context, obj interface{}) (model.GroupConversationPublishedInput, error) {
-	var it model.GroupConversationPublishedInput
+func (ec *executionContext) unmarshalInputGroupConversationNotificationInput(ctx context.Context, obj interface{}) (model.GroupConversationNotificationInput, error) {
+	var it model.GroupConversationNotificationInput
 	asMap := map[string]interface{}{}
 	for k, v := range obj.(map[string]interface{}) {
 		asMap[k] = v
@@ -6412,8 +6584,8 @@ func (ec *executionContext) unmarshalInputNewPersonalConversation(ctx context.Co
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputPersonalConversationPublishedInput(ctx context.Context, obj interface{}) (model.PersonalConversationPublishedInput, error) {
-	var it model.PersonalConversationPublishedInput
+func (ec *executionContext) unmarshalInputPersonalConversationNotificationInput(ctx context.Context, obj interface{}) (model.PersonalConversationNotificationInput, error) {
+	var it model.PersonalConversationNotificationInput
 	asMap := map[string]interface{}{}
 	for k, v := range obj.(map[string]interface{}) {
 		asMap[k] = v
@@ -6626,28 +6798,61 @@ func (ec *executionContext) _GroupConversation(ctx context.Context, sel ast.Sele
 		case "id":
 			out.Values[i] = ec._GroupConversation_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "groupId":
 			out.Values[i] = ec._GroupConversation_groupId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "senderId":
-			out.Values[i] = ec._GroupConversation_senderId(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "content":
 			out.Values[i] = ec._GroupConversation_content(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "createdAt":
 			out.Values[i] = ec._GroupConversation_createdAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "senderId":
+			out.Values[i] = ec._GroupConversation_senderId(ctx, field, obj)
+		case "sender":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._GroupConversation_sender(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -7209,6 +7414,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 	return out
 }
 
+var senderImplementors = []string{"Sender"}
+
+func (ec *executionContext) _Sender(ctx context.Context, sel ast.SelectionSet, obj *model.Sender) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, senderImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Sender")
+		case "name":
+			out.Values[i] = ec._Sender_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "id":
+			out.Values[i] = ec._Sender_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var subscriptionImplementors = []string{"Subscription"}
 
 func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
@@ -7222,10 +7471,10 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	}
 
 	switch fields[0].Name {
-	case "personalConversationPublished":
-		return ec._Subscription_personalConversationPublished(ctx, fields[0])
-	case "groupConversationPublished":
-		return ec._Subscription_groupConversationPublished(ctx, fields[0])
+	case "personalConversationNotification":
+		return ec._Subscription_personalConversationNotification(ctx, fields[0])
+	case "groupConversationNotification":
+		return ec._Subscription_groupConversationNotification(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -7769,8 +8018,8 @@ func (ec *executionContext) marshalNGroupConversation2ᚖchat_applicationᚋgrap
 	return ec._GroupConversation(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNGroupConversationPublishedInput2chat_applicationᚋgraphᚋmodelᚐGroupConversationPublishedInput(ctx context.Context, v interface{}) (model.GroupConversationPublishedInput, error) {
-	res, err := ec.unmarshalInputGroupConversationPublishedInput(ctx, v)
+func (ec *executionContext) unmarshalNGroupConversationNotificationInput2chat_applicationᚋgraphᚋmodelᚐGroupConversationNotificationInput(ctx context.Context, v interface{}) (model.GroupConversationNotificationInput, error) {
+	res, err := ec.unmarshalInputGroupConversationNotificationInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -7972,9 +8221,23 @@ func (ec *executionContext) marshalNPersonalConversation2ᚖchat_applicationᚋg
 	return ec._PersonalConversation(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNPersonalConversationPublishedInput2chat_applicationᚋgraphᚋmodelᚐPersonalConversationPublishedInput(ctx context.Context, v interface{}) (model.PersonalConversationPublishedInput, error) {
-	res, err := ec.unmarshalInputPersonalConversationPublishedInput(ctx, v)
+func (ec *executionContext) unmarshalNPersonalConversationNotificationInput2chat_applicationᚋgraphᚋmodelᚐPersonalConversationNotificationInput(ctx context.Context, v interface{}) (model.PersonalConversationNotificationInput, error) {
+	res, err := ec.unmarshalInputPersonalConversationNotificationInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSender2chat_applicationᚋgraphᚋmodelᚐSender(ctx context.Context, sel ast.SelectionSet, v model.Sender) graphql.Marshaler {
+	return ec._Sender(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSender2ᚖchat_applicationᚋgraphᚋmodelᚐSender(ctx context.Context, sel ast.SelectionSet, v *model.Sender) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Sender(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v interface{}) (string, error) {
@@ -7992,12 +8255,12 @@ func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.S
 	return res
 }
 
-func (ec *executionContext) unmarshalNTimestampWithTimeZone2string(ctx context.Context, v interface{}) (string, error) {
+func (ec *executionContext) unmarshalNTimestamp2string(ctx context.Context, v interface{}) (string, error) {
 	res, err := graphql.UnmarshalString(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTimestampWithTimeZone2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
+func (ec *executionContext) marshalNTimestamp2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
 	res := graphql.MarshalString(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -8344,6 +8607,22 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
+func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v interface{}) (*string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalID(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	res := graphql.MarshalID(*v)
+	return res
+}
+
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v interface{}) (*int, error) {
 	if v == nil {
 		return nil, nil
@@ -8376,7 +8655,7 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) unmarshalOTimestampWithTimeZone2ᚖstring(ctx context.Context, v interface{}) (*string, error) {
+func (ec *executionContext) unmarshalOTimestamp2ᚖstring(ctx context.Context, v interface{}) (*string, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -8384,7 +8663,7 @@ func (ec *executionContext) unmarshalOTimestampWithTimeZone2ᚖstring(ctx contex
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOTimestampWithTimeZone2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
+func (ec *executionContext) marshalOTimestamp2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

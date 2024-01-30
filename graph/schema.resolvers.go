@@ -12,6 +12,11 @@ import (
 	"context"
 )
 
+// Sender is the resolver for the sender field.
+func (r *groupConversationResolver) Sender(ctx context.Context, obj *model.GroupConversation) (*model.Sender, error) {
+	return groupChat.SenderDetails(ctx, obj)
+}
+
 // GroupMembers is the resolver for the groupMembers field.
 func (r *groupDetailsResolver) GroupMembers(ctx context.Context, obj *model.GroupDetails) ([]*model.GroupMemberDetails, error) {
 	return groupChat.GroupMembers(ctx, obj)
@@ -107,14 +112,19 @@ func (r *queryResolver) RecentConversationList(ctx context.Context, limit *int, 
 	return user.RecentConversationList(ctx, limit, offset)
 }
 
-// PersonalConversationPublished is the resolver for the personalConversationPublished field.
-func (r *subscriptionResolver) PersonalConversationPublished(ctx context.Context, input model.PersonalConversationPublishedInput) (<-chan *model.PersonalConversation, error) {
-	return personalChat.PersonalConversationPublished(ctx, input)
+// PersonalConversationNotification is the resolver for the personalConversationNotification field.
+func (r *subscriptionResolver) PersonalConversationNotification(ctx context.Context, input model.PersonalConversationNotificationInput) (<-chan *model.PersonalConversation, error) {
+	return personalChat.PersonalConversationNotification(ctx, input)
 }
 
-// GroupConversationPublished is the resolver for the groupConversationPublished field.
-func (r *subscriptionResolver) GroupConversationPublished(ctx context.Context, input model.GroupConversationPublishedInput) (<-chan *model.GroupConversation, error) {
-	return groupChat.GroupConversationPublished(ctx, input)
+// GroupConversationNotification is the resolver for the groupConversationNotification field.
+func (r *subscriptionResolver) GroupConversationNotification(ctx context.Context, input model.GroupConversationNotificationInput) (<-chan *model.GroupConversation, error) {
+	return groupChat.GroupConversationNotification(ctx, input)
+}
+
+// GroupConversation returns GroupConversationResolver implementation.
+func (r *Resolver) GroupConversation() GroupConversationResolver {
+	return &groupConversationResolver{r}
 }
 
 // GroupDetails returns GroupDetailsResolver implementation.
@@ -129,6 +139,7 @@ func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 // Subscription returns SubscriptionResolver implementation.
 func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionResolver{r} }
 
+type groupConversationResolver struct{ *Resolver }
 type groupDetailsResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }

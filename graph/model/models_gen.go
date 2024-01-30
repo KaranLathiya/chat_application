@@ -31,14 +31,15 @@ type Group struct {
 }
 
 type GroupConversation struct {
-	ID        string `json:"id"`
-	GroupID   string `json:"groupId"`
-	SenderID  string `json:"senderId"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"createdAt"`
+	ID        string  `json:"id"`
+	GroupID   string  `json:"groupId"`
+	Content   string  `json:"content"`
+	CreatedAt string  `json:"createdAt"`
+	SenderID  *string `json:"senderId,omitempty"`
+	Sender    *Sender `json:"sender"`
 }
 
-type GroupConversationPublishedInput struct {
+type GroupConversationNotificationInput struct {
 	GroupID  string `json:"groupId"`
 	MemberID string `json:"memberId"`
 }
@@ -96,12 +97,17 @@ type PersonalConversation struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
-type PersonalConversationPublishedInput struct {
+type PersonalConversationNotificationInput struct {
 	SenderID   string `json:"senderId"`
 	ReceiverID string `json:"receiverId"`
 }
 
 type Query struct {
+}
+
+type Sender struct {
+	Name string `json:"name"`
+	ID   string `json:"id"`
 }
 
 type Subscription struct {

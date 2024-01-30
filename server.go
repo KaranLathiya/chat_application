@@ -4,6 +4,7 @@ import (
 	"chat_application/api/auth"
 	"chat_application/api/customError"
 	"chat_application/api/dal"
+	"chat_application/api/dataloader"
 	"chat_application/graph"
 	"fmt"
 	"log"
@@ -36,6 +37,7 @@ func main() {
 	router := chi.NewRouter()
 
 	router.Use(auth.Middleware)
+	router.Use(dataloader.DataloaderMiddleware)
 
 	// srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{},Directives: graph.DirectiveRoot{}}))
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.NewRootResolvers(db)))

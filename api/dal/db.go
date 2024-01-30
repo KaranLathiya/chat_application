@@ -38,6 +38,11 @@ func Connect() (*sql.DB, error) {
 	return db, err
 }
 
+func LogAndQuery(db *sql.DB, query string, args ...interface{}) (*sql.Rows, error) {
+	fmt.Println(query)
+	return db.Query(query, args...)
+}
+
 func GetDB() *sql.DB {
 	return db
 }
