@@ -39,27 +39,26 @@ func DataloaderMiddleware(next http.Handler) http.Handler {
 				}
 				sqlQuery = sqlx.Rebind(sqlx.DOLLAR, sqlQuery)
 				rows, err := dal.LogAndQuery(db, sqlQuery, arguments...)
-				defer rows.Close()
+
 				if err != nil {
 					log.Println(err)
 				}
 				userById := map[string]*model.Sender{}
 
 				for rows.Next() {
+					defer rows.Close()
 					user := model.Sender{}
 					if err := rows.Scan(&user.ID, &user.Name); err != nil {
-
 						return nil, []error{fmt.Errorf("internal server error")}
 					}
 					userById[user.ID] = &user
 				}
-
+				
 				users := make([]*model.Sender, len(ids))
 				for i, id := range ids {
 					users[i] = userById[id]
 					i++
 				}
-
 				return users, nil
 			},
 		}

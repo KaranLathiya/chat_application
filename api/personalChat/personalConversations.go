@@ -3,6 +3,7 @@ package personalChat
 import (
 	"chat_application/api/auth"
 	"chat_application/api/chatCommon"
+	"chat_application/api/customError"
 	"chat_application/api/dal"
 	"chat_application/graph/model"
 	"context"
@@ -24,7 +25,8 @@ func PersonalConversationRecords(ctx context.Context, limit *int, offset *int, r
 	rows, err := db.Query(
 		"SELECT sender_id, receiver_id, content, created_at, id FROM public.personal_conversations WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1) ORDER BY created_at DESC LIMIT $3 OFFSET $4 ", userID, receiverID, limit, offset)
 	if err != nil {
-		return nil, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 	var personalConversations []*model.PersonalConversation
 	for rows.Next() {
@@ -44,8 +46,14 @@ func CreatePersonalConversation(ctx context.Context, input model.NewPersonalConv
 	senderID := ctx.Value(auth.UserCtxKey).(string)
 	currentFormattedTime := chatCommon.CurrentTimeConvertToCurrentFormattedTime()
 	errIfNoRows := db.QueryRow(
-		"INSERT INTO public.personal_conversations( sender_id, receiver_id, content, created_at) VALUES ( $1, $2, $3, $4)  RETURNING id, created_at;", senderID, input.ReceiverID, input.Content, currentFormattedTime).Scan(&personalConversation.ID, &personalConversation.CreatedAt)
-	if errIfNoRows == nil {
+		"INSERT INTO public.personal_conversations( sender_id, receiver_id, content, created_at) VALUES ( $1, $2, $3, $4) RETURNING id, created_at;", senderID, input.ReceiverID, input.Content, currentFormattedTime).Scan(&personalConversation.ID, &personalConversation.CreatedAt)
+		if errIfNoRows != nil {
+			if errIfNoRows == fmt.Errorf("sql: no rows in result set") {
+				return nil, fmt.Errorf("invalid senderId or receiverId")
+			}
+			databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
+			return nil, fmt.Errorf(databaseErrorMessage)
+		}
 		personalConversation.SenderID = senderID
 		personalConversation.ReceiverID = input.ReceiverID
 		personalConversation.Content = input.Content
@@ -59,8 +67,6 @@ func CreatePersonalConversation(ctx context.Context, input model.NewPersonalConv
 			}
 		}()
 		return &personalConversation, nil
-	}
-	return nil, errIfNoRows
 }
 
 func DeletePersonalConversation(ctx context.Context, messageID string) (bool, error) {
@@ -68,11 +74,12 @@ func DeletePersonalConversation(ctx context.Context, messageID string) (bool, er
 	db := dal.GetDB()
 	result, err := db.Exec("DELETE FROM public.personal_conversations WHERE sender_id=$1 AND id=$2;", senderID, messageID)
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		return false, fmt.Errorf("wrong data")
+		return false, fmt.Errorf("invalid messageId")
 	}
 	return true, nil
 }
@@ -88,7 +95,7 @@ func PersonalConversationNotification(ctx context.Context, input model.PersonalC
 	}()
 	senderAndReceiverMap[id] = map[string]string{"senderID": input.SenderID, "receiverID": input.ReceiverID}
 	personalConversationPublishedChannelMap[id] = personalConversationEvent
-	// fmt.Println("after allocating variable"p
+	// fmt.Println("after allocating variable")
 
 	// printAllocatedMemory()
 	// runtime.KeepAlive(senderAndReceiverMap) // Keeps a reference to m so that the map isn’t collected

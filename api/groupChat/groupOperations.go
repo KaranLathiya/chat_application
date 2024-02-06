@@ -3,6 +3,7 @@ package groupChat
 import (
 	"chat_application/api/auth"
 	"chat_application/api/chatCommon"
+	"chat_application/api/customError"
 	"chat_application/api/dal"
 	"chat_application/api/dataloader"
 	"chat_application/api/user"
@@ -22,30 +23,35 @@ func CreateGroup(ctx context.Context, input model.NewGroup) (*model.Group, error
 	currentFormattedTime := chatCommon.CurrentTimeConvertToCurrentFormattedTime()
 	tx, err := db.Begin()
 	if err != nil {
-		return nil, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 	defer tx.Rollback()
 
 	err = tx.QueryRow("INSERT INTO public.groups( name, admin_id, created_at) VALUES ( $1, $2, $3)  RETURNING id, created_at;", input.Name, adminID, currentFormattedTime).Scan(&group.ID, &group.CreatedAt)
 	if err != nil {
-		return nil, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 
 	_, err = tx.Exec("INSERT INTO public.group_members (group_id, member_id) VALUES ($1, $2)", group.ID, adminID)
 	if err != nil {
-		return nil, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 
 	content := fmt.Sprintf("Group created :- %v", input.Name)
 	_, err = tx.Exec("INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4);", group.ID, adminID, content, currentFormattedTime)
 	if err != nil {
-		return nil, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 
 	// Commit the transaction
 	err = tx.Commit()
 	if err != nil {
-		return nil, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 	group.AdminID = adminID
 	group.Name = input.Name
@@ -60,14 +66,22 @@ func GroupDetails(ctx context.Context, groupID string) (*model.GroupDetails, err
 	errIfNoRows := db.QueryRow(
 		"SELECT name, admin_id, created_at FROM public.groups WHERE id=$1;", groupID).Scan(&groupDetails.Name, &groupDetails.AdminID, &groupDetails.CreatedAt)
 	if errIfNoRows != nil {
-		return nil, fmt.Errorf("invalid groupid")
+		if errIfNoRows.Error() == "sql: no rows in result set" {
+			return nil, fmt.Errorf("invalid groupId")
+		}
+		databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 	fmt.Println("group details called")
 	var removedFromGroup bool
 	errIfNoRows = db.QueryRow(
 		"SELECT is_removed FROM public.group_members WHERE member_id=$1 AND group_id=$2;", memberID, groupID).Scan(&removedFromGroup)
 	if errIfNoRows != nil {
-		return nil, fmt.Errorf("user is not member of group")
+		if errIfNoRows.Error() == "sql: no rows in result set" {
+			return nil, fmt.Errorf("user is not member of group")
+		}
+		databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 	groupDetails.GroupID = groupID
 	if removedFromGroup {
@@ -86,7 +100,8 @@ func GroupMembers(ctx context.Context, obj *model.GroupDetails) ([]*model.GroupM
 	fmt.Println("members finding")
 	rows, err := db.Query("SELECT member_id, is_removed, removed_at FROM public.group_members WHERE group_id=$1;", obj.GroupID)
 	if err != nil {
-		return nil, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 	var groupMembersDetails []*model.GroupMemberDetails
 	for rows.Next() {
@@ -106,7 +121,7 @@ func MembersListThatCanJoinTheGroup(ctx context.Context, input model.MembersList
 	userID := ctx.Value(auth.UserCtxKey).(string)
 	err := checkUserIsAdminOfGroup(db, userID, input.GroupID)
 	if err != nil {
-		return nil, fmt.Errorf("user is not admin group")
+		return nil, err
 	}
 	offset := (*input.Page - 1) * *input.Limit
 	var where, orderBy []string
@@ -135,7 +150,8 @@ func MembersListThatCanJoinTheGroup(ctx context.Context, input model.MembersList
 	// fmt.Println(query)
 	rows, err := db.Query(query, filterArgsList...)
 	if err != nil {
-		return nil, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
 	var users []*model.User
 	for rows.Next() {
@@ -154,11 +170,12 @@ func AddGroupMembers(ctx context.Context, input model.GroupMembersInput) (bool, 
 	db := dal.GetDB()
 	err := checkUserIsAdminOfGroup(db, adminID, input.GroupID)
 	if err != nil {
-		return false, fmt.Errorf("user is not admin group")
+		return false, err
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	defer tx.Rollback()
 	currentFormattedTime := chatCommon.CurrentTimeConvertToCurrentFormattedTime()
@@ -167,32 +184,41 @@ func AddGroupMembers(ctx context.Context, input model.GroupMembersInput) (bool, 
 		errIfNoRows := tx.QueryRow(
 			"SELECT is_removed FROM public.group_members WHERE member_id=$1 AND group_id=$2;", input.MemberID[i], input.GroupID).Scan(&removedFromGroup)
 		if errIfNoRows != nil {
+			if errIfNoRows.Error() != "sql: no rows in result set" {
+				databaseErrorMessage := customError.DatabaseErrorShow(err)
+				return false, fmt.Errorf(databaseErrorMessage)
+			}
 			_, err := tx.Exec("INSERT INTO public.group_members (group_id, member_id) VALUES ($1, $2);", input.GroupID, input.MemberID[i])
 			if err != nil {
-				return false, fmt.Errorf("invalid memberid or group id")
+				databaseErrorMessage := customError.DatabaseErrorShow(err)
+				return false, fmt.Errorf(databaseErrorMessage)
 			}
 		} else if removedFromGroup {
 			_, err := tx.Exec("UPDATE public.group_members SET is_removed = false, removed_at = null where group_id = $1 and member_id = $2 ;", input.GroupID, input.MemberID[i])
 			if err != nil {
-				return false, fmt.Errorf("invalid memberid")
+				databaseErrorMessage := customError.DatabaseErrorShow(err)
+				return false, fmt.Errorf(databaseErrorMessage)
 			}
 		} else {
+			// already memeber of group
 			continue
 		}
 		memberName, err := user.UserNameByID(ctx, input.MemberID[i])
 		if err != nil {
-			return false, fmt.Errorf("invalid memberid")
+			return false, err
 		}
 		content := fmt.Sprintf("%s added in to the group", memberName)
 		_, err = tx.Exec("INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4);", input.GroupID, adminID, content, currentFormattedTime)
 		if err != nil {
-			return false, err
+			databaseErrorMessage := customError.DatabaseErrorShow(err)
+			return false, fmt.Errorf(databaseErrorMessage)
 		}
 	}
 	// Commit the transaction
 	err = tx.Commit()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	return true, nil
 }
@@ -220,11 +246,12 @@ func RemoveGroupMembers(ctx context.Context, input model.GroupMembersInput) (boo
 	db := dal.GetDB()
 	err := checkUserIsAdminOfGroup(db, adminID, input.GroupID)
 	if err != nil {
-		return false, fmt.Errorf("user is not admin of group")
+		return false, err
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	defer tx.Rollback()
 	currentFormattedTime := chatCommon.CurrentTimeConvertToCurrentFormattedTime()
@@ -234,22 +261,25 @@ func RemoveGroupMembers(ctx context.Context, input model.GroupMembersInput) (boo
 		}
 		_, err = tx.Exec("UPDATE public.group_members SET is_removed=true, removed_at=$1 WHERE group_id=$2 AND member_id=$3;", currentFormattedTime, input.GroupID, input.MemberID[i])
 		if err != nil {
-			return false, err
+			databaseErrorMessage := customError.DatabaseErrorShow(err)
+			return false, fmt.Errorf(databaseErrorMessage)
 		}
 		memberName, err := user.UserNameByID(ctx, input.MemberID[i])
 		if err != nil {
-			return false, fmt.Errorf("invalid memberid")
+			return false, err
 		}
 		content := fmt.Sprintf("%s removed from the group", memberName)
 		_, err = tx.Exec("INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4);", input.GroupID, adminID, content, currentFormattedTime)
 		if err != nil {
-			return false, err
+			databaseErrorMessage := customError.DatabaseErrorShow(err)
+			return false, fmt.Errorf(databaseErrorMessage)
 		}
 	}
 	// Commit the transaction
 	err = tx.Commit()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	return true, nil
 }
@@ -260,36 +290,40 @@ func ChangeGroupAdmin(ctx context.Context, input model.ChangeGroupAdminInput) (b
 	db := dal.GetDB()
 	err := checkUserIsAdminOfGroup(db, adminID, input.GroupID)
 	if err != nil {
-		return false, fmt.Errorf("user is not admin group")
+		return false, err
 	}
 	if adminID == input.NewAdminID {
 		return false, fmt.Errorf("member is already admin of group")
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	defer tx.Rollback()
 	result, err := tx.Exec("UPDATE public.groups SET admin_id=$1 WHERE id=$2 AND admin_id=$3;", input.NewAdminID, input.GroupID, adminID)
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		return false, fmt.Errorf("invalid memberid")
+		return false, fmt.Errorf("invalid memberId")
 	}
 	newAdminName, err := user.UserNameByID(ctx, input.NewAdminID)
 	if err != nil {
-		return false, fmt.Errorf("invalid memberid")
+		return false, err
 	}
 	content := fmt.Sprintf("%s is the new admin of the group", newAdminName)
 	_, err = tx.Exec("INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4)", input.GroupID, adminID, content, currentFormattedTime)
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	err = tx.Commit()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	return true, nil
 }
@@ -300,30 +334,34 @@ func ChangeGroupName(ctx context.Context, input model.ChangeGroupNameInput) (boo
 	db := dal.GetDB()
 	err := checkUserIsAdminOfGroup(db, adminID, input.GroupID)
 	if err != nil {
-		return false, fmt.Errorf("user is not admin group")
+		return false, err
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	defer tx.Rollback()
 	result, err := tx.Exec("UPDATE public.groups SET name=$1 WHERE name != $1 AND id=$2 AND admin_id=$3 ;", input.NewGroupName, input.GroupID, adminID)
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	RowsAffected, _ := result.RowsAffected()
-	fmt.Println(RowsAffected)
+	// fmt.Println(RowsAffected)
 	if RowsAffected == 0 {
 		return false, fmt.Errorf("no change in group name")
 	}
 	content := fmt.Sprintf("Group name changed to :- %s ", input.NewGroupName)
 	_, err = tx.Exec("INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4)", input.GroupID, adminID, content, currentFormattedTime)
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	err = tx.Commit()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	return true, nil
 }
@@ -336,32 +374,40 @@ func LeaveGroup(ctx context.Context, groupID string) (bool, error) {
 	if err == nil {
 		return false, fmt.Errorf("admin can not leave group directly")
 	}
+	if err.Error() == "sql: no rows in result set" {
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
+	}
 	tx, err := db.Begin()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	defer tx.Rollback()
 	result, err := tx.Exec("UPDATE public.group_members SET is_removed=true, removed_at=$1 WHERE is_removed=false AND group_id=$2 AND member_id=$3;", currentFormattedTime, groupID, memberID)
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	RowsAffected, _ := result.RowsAffected()
-	fmt.Println(RowsAffected)
+	// fmt.Println(RowsAffected)
 	if RowsAffected == 0 {
 		return false, fmt.Errorf("user is not member of this group")
 	}
 	memberName, err := user.UserNameByID(ctx, memberID)
 	if err != nil {
-		return false, fmt.Errorf("invalid memberid")
+		return false, err
 	}
 	content := fmt.Sprintf("%s left the group", memberName)
 	_, err = tx.Exec("INSERT INTO public.group_conversations( group_id, sender_id, content, created_at) VALUES ( $1, $2, $3, $4);", groupID, memberID, content, currentFormattedTime)
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	err = tx.Commit()
 	if err != nil {
-		return false, err
+		databaseErrorMessage := customError.DatabaseErrorShow(err)
+		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	return true, nil
 }
@@ -373,6 +419,12 @@ func SenderDetails(ctx context.Context, obj *model.GroupConversation) (*model.Se
 
 func checkUserIsAdminOfGroup(db *sql.DB, adminID string, groupID string) error {
 	errIfNoRows := db.QueryRow("SELECT admin_id FROM public.groups WHERE admin_id = $1 AND id = $2;", adminID, groupID).Scan(&adminID)
-	// fmt.Println(adminID, groupID)
-	return errIfNoRows
+	if errIfNoRows != nil {
+		if errIfNoRows.Error() == "sql: no rows in result set" {
+			return fmt.Errorf("user is not admin of group or invalid groupId")
+		}
+		databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
+		return fmt.Errorf(databaseErrorMessage)
+	}
+	return nil
 }

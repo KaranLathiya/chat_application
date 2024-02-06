@@ -49,18 +49,13 @@ func NewRootResolvers(db *sql.DB) Config {
 }
 func validateUserByAuthorizationKey(id string) (bool, string) {
 	db := dal.GetDB()
-	rows, err := db.Query("select id from public.users where id=$1", id)
-	if err != nil {
-		errMessage := customError.DatabaseErrorShow(err)
+	errIfNoRows := db.QueryRow("SELECT id from public.users where id=$1", id).Scan(&id)
+	if errIfNoRows != nil {
+		if errIfNoRows.Error() == "sql: no rows in result set" {
+			return false, "invalid authorization key"
+		}
+		errMessage := customError.DatabaseErrorShow(errIfNoRows)
 		return false, errMessage
 	}
-	i := 0
-	for rows.Next() {
-		i += 1
-	}
-	defer rows.Close()
-	if i == 0 {
-		return false, "invalid authorization key"
-	}
-	return true, ""
+	return true,""
 }

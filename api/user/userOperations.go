@@ -2,6 +2,7 @@ package user
 
 import (
 	"chat_application/api/auth"
+	"chat_application/api/customError"
 	"chat_application/api/dal"
 	"chat_application/graph/model"
 	"context"
@@ -61,7 +62,7 @@ func RecentConversationList(ctx context.Context, limit *int, offset *int) ([]*mo
 		SELECT
 			last_message_time,
 			conversation_id,
-			is_it_group
+			is_it_group	
 		FROM
 			(
 			SELECT
@@ -127,19 +128,27 @@ func UserDetailsByID(ctx context.Context, userID string) (*model.User, error) {
 	db := dal.GetDB()
 	var user model.User
 	errIfNoRows := db.QueryRow("SELECT fullname, email, ip_address, gender FROM public.users WHERE id=$1", userID).Scan(&user.FullName, &user.Email, &user.IPAddress, &user.Gender)
-	if errIfNoRows == nil {
-		user.ID = userID 
-		return &user, nil
+	if errIfNoRows != nil {
+		if errIfNoRows.Error() == "sql: no rows in result set" {
+			return nil, fmt.Errorf("no user found with that Id")
+		}
+		databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
+		return nil, fmt.Errorf(databaseErrorMessage)
 	}
-	return &user, errIfNoRows
+		user.ID = userID
+		return &user, nil
 }
 
 func UserNameByID(ctx context.Context, userID string) (string, error) {
 	db := dal.GetDB()
 	var name string
 	errIfNoRows := db.QueryRow("SELECT fullname FROM public.users WHERE id=$1", userID).Scan(&name)
-	if errIfNoRows == nil {
-		return name, nil
+	if errIfNoRows != nil {
+		if errIfNoRows.Error() == "sql: no rows in result set" {
+			return "", fmt.Errorf("no user found with that Id")
+		}
+		databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
+		return "", fmt.Errorf(databaseErrorMessage)
 	}
-	return "", fmt.Errorf("no user found with that id")
+	return name, nil
 }
