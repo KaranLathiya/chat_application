@@ -88,7 +88,6 @@ func GroupDetails(ctx context.Context, groupID string) (*model.GroupDetails, err
 		groupDetails.IsRemoved = true
 		return &groupDetails, nil
 	}
-
 	return &groupDetails, nil
 }
 
@@ -301,6 +300,19 @@ func ChangeGroupAdmin(ctx context.Context, input model.ChangeGroupAdminInput) (b
 		return false, fmt.Errorf(databaseErrorMessage)
 	}
 	defer tx.Rollback()
+	var removedFromGroup bool
+	errIfNoRows := tx.QueryRow(
+		"SELECT is_removed FROM public.group_members WHERE member_id=$1 AND group_id=$2;", input.NewAdminID, input.GroupID).Scan(&removedFromGroup)
+	if errIfNoRows != nil {
+		if errIfNoRows.Error() == "sql: no rows in result set" {
+			return false, fmt.Errorf("user is not member of group")
+		}
+		databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
+		return false, fmt.Errorf(databaseErrorMessage)
+	}
+	if removedFromGroup {
+		return false, fmt.Errorf("user is no more member of group")
+	}
 	result, err := tx.Exec("UPDATE public.groups SET admin_id=$1 WHERE id=$2 AND admin_id=$3;", input.NewAdminID, input.GroupID, adminID)
 	if err != nil {
 		databaseErrorMessage := customError.DatabaseErrorShow(err)
@@ -413,7 +425,8 @@ func LeaveGroup(ctx context.Context, groupID string) (bool, error) {
 }
 
 func SenderDetails(ctx context.Context, obj *model.GroupConversation) (*model.Sender, error) {
-	user, err := ctx.Value(dataloader.CtxKey).(*dataloader.UserLoader).Load(*obj.SenderID)
+	fmt.Println("runningg")
+	user, err := ctx.Value(dataloader.CtxKey).(*dataloader.UserLoader).Load(*obj.MessageSenderID)
 	return user, err
 }
 

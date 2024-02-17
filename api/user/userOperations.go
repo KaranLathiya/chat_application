@@ -12,6 +12,8 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+var ConversationNotificationMap = make(map[string]chan model.ConversationNotification)
+
 func UserList(ctx context.Context, input *model.UserListInput) ([]*model.User, error) {
 	db := dal.GetDB()
 	offset := (*input.Page - 1) * *input.Limit
@@ -124,6 +126,25 @@ func RecentConversationList(ctx context.Context, limit *int, offset *int) ([]*mo
 	return conversationList, nil
 }
 
+func ConversationNotification(ctx context.Context) (<-chan model.ConversationNotification, error) {
+	userID := ctx.Value(auth.UserCtxKey).(string)
+	conversationEvent, ok := ConversationNotificationMap[userID]
+	if !ok {
+		fmt.Println("new chan")
+		conversationEvent = make(chan model.ConversationNotification, 1)
+		// go func() {
+		// 	<-ctx.Done()
+		// 	defer clearSubscriptionVariables(userID)
+		// }()
+	}
+	ConversationNotificationMap[userID] = conversationEvent
+	// fmt.Println("after allocating variable")
+	fmt.Println(conversationEvent)
+	// printAllocatedMemory()
+	// runtime.KeepAlive(senderAndReceiverMap) // Keeps a reference to m so that the map isn’t collected
+	return conversationEvent, nil
+}
+
 func UserDetailsByID(ctx context.Context, userID string) (*model.User, error) {
 	db := dal.GetDB()
 	var user model.User
@@ -135,8 +156,8 @@ func UserDetailsByID(ctx context.Context, userID string) (*model.User, error) {
 		databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
 		return nil, fmt.Errorf(databaseErrorMessage)
 	}
-		user.ID = userID
-		return &user, nil
+	user.ID = userID
+	return &user, nil
 }
 
 func UserNameByID(ctx context.Context, userID string) (string, error) {
@@ -151,4 +172,9 @@ func UserNameByID(ctx context.Context, userID string) (string, error) {
 		return "", fmt.Errorf(databaseErrorMessage)
 	}
 	return name, nil
+}
+
+func clearSubscriptionVariables(id string) {
+	fmt.Println("clearing")
+	delete(ConversationNotificationMap, id)
 }

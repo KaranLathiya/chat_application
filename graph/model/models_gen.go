@@ -2,6 +2,10 @@
 
 package model
 
+type ConversationNotification interface {
+	IsConversationNotification()
+}
+
 type ChangeGroupAdminInput struct {
 	GroupID    string `json:"groupId"`
 	NewAdminID string `json:"newAdminId"`
@@ -31,13 +35,15 @@ type Group struct {
 }
 
 type GroupConversation struct {
-	ID        string  `json:"id"`
-	GroupID   string  `json:"groupId"`
-	Content   string  `json:"content"`
-	CreatedAt string  `json:"createdAt"`
-	SenderID  *string `json:"senderId,omitempty"`
-	Sender    *Sender `json:"sender"`
+	ID              string  `json:"id"`
+	GroupID         string  `json:"groupId"`
+	Content         string  `json:"content"`
+	CreatedAt       string  `json:"createdAt"`
+	MessageSenderID *string `json:"messageSenderId,omitempty"`
+	Sender          *Sender `json:"sender"`
 }
+
+func (GroupConversation) IsConversationNotification() {}
 
 type GroupConversationNotificationInput struct {
 	GroupID  string `json:"groupId"`
@@ -96,6 +102,8 @@ type PersonalConversation struct {
 	Content    string `json:"content"`
 	CreatedAt  string `json:"createdAt"`
 }
+
+func (PersonalConversation) IsConversationNotification() {}
 
 type PersonalConversationNotificationInput struct {
 	SenderID   string `json:"senderId"`

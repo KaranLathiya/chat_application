@@ -66,12 +66,12 @@ type ComplexityRoot struct {
 	}
 
 	GroupConversation struct {
-		Content   func(childComplexity int) int
-		CreatedAt func(childComplexity int) int
-		GroupID   func(childComplexity int) int
-		ID        func(childComplexity int) int
-		Sender    func(childComplexity int) int
-		SenderID  func(childComplexity int) int
+		Content         func(childComplexity int) int
+		CreatedAt       func(childComplexity int) int
+		GroupID         func(childComplexity int) int
+		ID              func(childComplexity int) int
+		MessageSenderID func(childComplexity int) int
+		Sender          func(childComplexity int) int
 	}
 
 	GroupDetails struct {
@@ -127,8 +127,7 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		GroupConversationNotification    func(childComplexity int, input model.GroupConversationNotificationInput) int
-		PersonalConversationNotification func(childComplexity int, input model.PersonalConversationNotificationInput) int
+		ConversationNotification func(childComplexity int) int
 	}
 
 	User struct {
@@ -169,8 +168,7 @@ type QueryResolver interface {
 	RecentConversationList(ctx context.Context, limit *int, offset *int) ([]*model.ConversationList, error)
 }
 type SubscriptionResolver interface {
-	PersonalConversationNotification(ctx context.Context, input model.PersonalConversationNotificationInput) (<-chan *model.PersonalConversation, error)
-	GroupConversationNotification(ctx context.Context, input model.GroupConversationNotificationInput) (<-chan *model.GroupConversation, error)
+	ConversationNotification(ctx context.Context) (<-chan model.ConversationNotification, error)
 }
 
 type executableSchema struct {
@@ -269,19 +267,19 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.GroupConversation.ID(childComplexity), true
 
+	case "GroupConversation.messageSenderId":
+		if e.complexity.GroupConversation.MessageSenderID == nil {
+			break
+		}
+
+		return e.complexity.GroupConversation.MessageSenderID(childComplexity), true
+
 	case "GroupConversation.sender":
 		if e.complexity.GroupConversation.Sender == nil {
 			break
 		}
 
 		return e.complexity.GroupConversation.Sender(childComplexity), true
-
-	case "GroupConversation.senderId":
-		if e.complexity.GroupConversation.SenderID == nil {
-			break
-		}
-
-		return e.complexity.GroupConversation.SenderID(childComplexity), true
 
 	case "GroupDetails.adminId":
 		if e.complexity.GroupDetails.AdminID == nil {
@@ -611,29 +609,12 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Sender.Name(childComplexity), true
 
-	case "Subscription.groupConversationNotification":
-		if e.complexity.Subscription.GroupConversationNotification == nil {
+	case "Subscription.conversationNotification":
+		if e.complexity.Subscription.ConversationNotification == nil {
 			break
 		}
 
-		args, err := ec.field_Subscription_groupConversationNotification_args(context.TODO(), rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Subscription.GroupConversationNotification(childComplexity, args["input"].(model.GroupConversationNotificationInput)), true
-
-	case "Subscription.personalConversationNotification":
-		if e.complexity.Subscription.PersonalConversationNotification == nil {
-			break
-		}
-
-		args, err := ec.field_Subscription_personalConversationNotification_args(context.TODO(), rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Subscription.PersonalConversationNotification(childComplexity, args["input"].(model.PersonalConversationNotificationInput)), true
+		return e.complexity.Subscription.ConversationNotification(childComplexity), true
 
 	case "User.email":
 		if e.complexity.User.Email == nil {
@@ -1149,36 +1130,6 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 		}
 	}
 	args["name"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Subscription_groupConversationNotification_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
-	var err error
-	args := map[string]interface{}{}
-	var arg0 model.GroupConversationNotificationInput
-	if tmp, ok := rawArgs["input"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
-		arg0, err = ec.unmarshalNGroupConversationNotificationInput2chat_applicationᚋgraphᚋmodelᚐGroupConversationNotificationInput(ctx, tmp)
-		if err != nil {
-			return nil, err
-		}
-	}
-	args["input"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Subscription_personalConversationNotification_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
-	var err error
-	args := map[string]interface{}{}
-	var arg0 model.PersonalConversationNotificationInput
-	if tmp, ok := rawArgs["input"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
-		arg0, err = ec.unmarshalNPersonalConversationNotificationInput2chat_applicationᚋgraphᚋmodelᚐPersonalConversationNotificationInput(ctx, tmp)
-		if err != nil {
-			return nil, err
-		}
-	}
-	args["input"] = arg0
 	return args, nil
 }
 
@@ -1704,8 +1655,8 @@ func (ec *executionContext) fieldContext_GroupConversation_createdAt(ctx context
 	return fc, nil
 }
 
-func (ec *executionContext) _GroupConversation_senderId(ctx context.Context, field graphql.CollectedField, obj *model.GroupConversation) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_GroupConversation_senderId(ctx, field)
+func (ec *executionContext) _GroupConversation_messageSenderId(ctx context.Context, field graphql.CollectedField, obj *model.GroupConversation) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_GroupConversation_messageSenderId(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -1718,7 +1669,7 @@ func (ec *executionContext) _GroupConversation_senderId(ctx context.Context, fie
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.SenderID, nil
+		return obj.MessageSenderID, nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1732,7 +1683,7 @@ func (ec *executionContext) _GroupConversation_senderId(ctx context.Context, fie
 	return ec.marshalOID2ᚖstring(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_GroupConversation_senderId(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_GroupConversation_messageSenderId(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "GroupConversation",
 		Field:      field,
@@ -2350,8 +2301,8 @@ func (ec *executionContext) fieldContext_Mutation_createGroupConversation(ctx co
 				return ec.fieldContext_GroupConversation_content(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_GroupConversation_createdAt(ctx, field)
-			case "senderId":
-				return ec.fieldContext_GroupConversation_senderId(ctx, field)
+			case "messageSenderId":
+				return ec.fieldContext_GroupConversation_messageSenderId(ctx, field)
 			case "sender":
 				return ec.fieldContext_GroupConversation_sender(ctx, field)
 			}
@@ -3781,8 +3732,8 @@ func (ec *executionContext) fieldContext_Query_GroupConversationRecords(ctx cont
 				return ec.fieldContext_GroupConversation_content(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_GroupConversation_createdAt(ctx, field)
-			case "senderId":
-				return ec.fieldContext_GroupConversation_senderId(ctx, field)
+			case "messageSenderId":
+				return ec.fieldContext_GroupConversation_messageSenderId(ctx, field)
 			case "sender":
 				return ec.fieldContext_GroupConversation_sender(ctx, field)
 			}
@@ -4103,8 +4054,8 @@ func (ec *executionContext) fieldContext_Sender_id(ctx context.Context, field gr
 	return fc, nil
 }
 
-func (ec *executionContext) _Subscription_personalConversationNotification(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
-	fc, err := ec.fieldContext_Subscription_personalConversationNotification(ctx, field)
+func (ec *executionContext) _Subscription_conversationNotification(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	fc, err := ec.fieldContext_Subscription_conversationNotification(ctx, field)
 	if err != nil {
 		return nil
 	}
@@ -4116,8 +4067,28 @@ func (ec *executionContext) _Subscription_personalConversationNotification(ctx c
 		}
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Subscription().PersonalConversationNotification(rctx, fc.Args["input"].(model.PersonalConversationNotificationInput))
+		directive0 := func(rctx context.Context) (interface{}, error) {
+			ctx = rctx // use context from middleware stack in children
+			return ec.resolvers.Subscription().ConversationNotification(rctx)
+		}
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			if ec.directives.IsAuthenticated == nil {
+				return nil, errors.New("directive isAuthenticated is not implemented")
+			}
+			return ec.directives.IsAuthenticated(ctx, nil, directive0)
+		}
+
+		tmp, err := directive1(rctx)
+		if err != nil {
+			return nil, graphql.ErrorOnPath(ctx, err)
+		}
+		if tmp == nil {
+			return nil, nil
+		}
+		if data, ok := tmp.(<-chan model.ConversationNotification); ok {
+			return data, nil
+		}
+		return nil, fmt.Errorf(`unexpected type %T from directive, should be <-chan chat_application/graph/model.ConversationNotification`, tmp)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -4131,7 +4102,7 @@ func (ec *executionContext) _Subscription_personalConversationNotification(ctx c
 	}
 	return func(ctx context.Context) graphql.Marshaler {
 		select {
-		case res, ok := <-resTmp.(<-chan *model.PersonalConversation):
+		case res, ok := <-resTmp.(<-chan model.ConversationNotification):
 			if !ok {
 				return nil
 			}
@@ -4139,7 +4110,7 @@ func (ec *executionContext) _Subscription_personalConversationNotification(ctx c
 				w.Write([]byte{'{'})
 				graphql.MarshalString(field.Alias).MarshalGQL(w)
 				w.Write([]byte{':'})
-				ec.marshalNPersonalConversation2ᚖchat_applicationᚋgraphᚋmodelᚐPersonalConversation(ctx, field.Selections, res).MarshalGQL(w)
+				ec.marshalNConversationNotification2chat_applicationᚋgraphᚋmodelᚐConversationNotification(ctx, field.Selections, res).MarshalGQL(w)
 				w.Write([]byte{'}'})
 			})
 		case <-ctx.Done():
@@ -4148,121 +4119,15 @@ func (ec *executionContext) _Subscription_personalConversationNotification(ctx c
 	}
 }
 
-func (ec *executionContext) fieldContext_Subscription_personalConversationNotification(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Subscription_conversationNotification(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Subscription",
 		Field:      field,
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_PersonalConversation_id(ctx, field)
-			case "senderId":
-				return ec.fieldContext_PersonalConversation_senderId(ctx, field)
-			case "receiverId":
-				return ec.fieldContext_PersonalConversation_receiverId(ctx, field)
-			case "content":
-				return ec.fieldContext_PersonalConversation_content(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_PersonalConversation_createdAt(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type PersonalConversation", field.Name)
+			return nil, errors.New("field of type ConversationNotification does not have child fields")
 		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_personalConversationNotification_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Subscription_groupConversationNotification(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
-	fc, err := ec.fieldContext_Subscription_groupConversationNotification(ctx, field)
-	if err != nil {
-		return nil
-	}
-	ctx = graphql.WithFieldContext(ctx, fc)
-	defer func() {
-		if r := recover(); r != nil {
-			ec.Error(ctx, ec.Recover(ctx, r))
-			ret = nil
-		}
-	}()
-	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Subscription().GroupConversationNotification(rctx, fc.Args["input"].(model.GroupConversationNotificationInput))
-	})
-	if err != nil {
-		ec.Error(ctx, err)
-		return nil
-	}
-	if resTmp == nil {
-		if !graphql.HasFieldError(ctx, fc) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return nil
-	}
-	return func(ctx context.Context) graphql.Marshaler {
-		select {
-		case res, ok := <-resTmp.(<-chan *model.GroupConversation):
-			if !ok {
-				return nil
-			}
-			return graphql.WriterFunc(func(w io.Writer) {
-				w.Write([]byte{'{'})
-				graphql.MarshalString(field.Alias).MarshalGQL(w)
-				w.Write([]byte{':'})
-				ec.marshalNGroupConversation2ᚖchat_applicationᚋgraphᚋmodelᚐGroupConversation(ctx, field.Selections, res).MarshalGQL(w)
-				w.Write([]byte{'}'})
-			})
-		case <-ctx.Done():
-			return nil
-		}
-	}
-}
-
-func (ec *executionContext) fieldContext_Subscription_groupConversationNotification(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Subscription",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_GroupConversation_id(ctx, field)
-			case "groupId":
-				return ec.fieldContext_GroupConversation_groupId(ctx, field)
-			case "content":
-				return ec.fieldContext_GroupConversation_content(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_GroupConversation_createdAt(ctx, field)
-			case "senderId":
-				return ec.fieldContext_GroupConversation_senderId(ctx, field)
-			case "sender":
-				return ec.fieldContext_GroupConversation_sender(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type GroupConversation", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_groupConversationNotification_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
 	}
 	return fc, nil
 }
@@ -6677,6 +6542,29 @@ func (ec *executionContext) unmarshalInputUserListInput(ctx context.Context, obj
 
 // region    ************************** interface.gotpl ***************************
 
+func (ec *executionContext) _ConversationNotification(ctx context.Context, sel ast.SelectionSet, obj model.ConversationNotification) graphql.Marshaler {
+	switch obj := (obj).(type) {
+	case nil:
+		return graphql.Null
+	case model.PersonalConversation:
+		return ec._PersonalConversation(ctx, sel, &obj)
+	case *model.PersonalConversation:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._PersonalConversation(ctx, sel, obj)
+	case model.GroupConversation:
+		return ec._GroupConversation(ctx, sel, &obj)
+	case *model.GroupConversation:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._GroupConversation(ctx, sel, obj)
+	default:
+		panic(fmt.Errorf("unexpected type %T", obj))
+	}
+}
+
 // endregion ************************** interface.gotpl ***************************
 
 // region    **************************** object.gotpl ****************************
@@ -6784,7 +6672,7 @@ func (ec *executionContext) _Group(ctx context.Context, sel ast.SelectionSet, ob
 	return out
 }
 
-var groupConversationImplementors = []string{"GroupConversation"}
+var groupConversationImplementors = []string{"GroupConversation", "ConversationNotification"}
 
 func (ec *executionContext) _GroupConversation(ctx context.Context, sel ast.SelectionSet, obj *model.GroupConversation) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, groupConversationImplementors)
@@ -6815,8 +6703,8 @@ func (ec *executionContext) _GroupConversation(ctx context.Context, sel ast.Sele
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "senderId":
-			out.Values[i] = ec._GroupConversation_senderId(ctx, field, obj)
+		case "messageSenderId":
+			out.Values[i] = ec._GroupConversation_messageSenderId(ctx, field, obj)
 		case "sender":
 			field := field
 
@@ -7129,7 +7017,7 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 	return out
 }
 
-var personalConversationImplementors = []string{"PersonalConversation"}
+var personalConversationImplementors = []string{"PersonalConversation", "ConversationNotification"}
 
 func (ec *executionContext) _PersonalConversation(ctx context.Context, sel ast.SelectionSet, obj *model.PersonalConversation) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, personalConversationImplementors)
@@ -7471,10 +7359,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	}
 
 	switch fields[0].Name {
-	case "personalConversationNotification":
-		return ec._Subscription_personalConversationNotification(ctx, fields[0])
-	case "groupConversationNotification":
-		return ec._Subscription_groupConversationNotification(ctx, fields[0])
+	case "conversationNotification":
+		return ec._Subscription_conversationNotification(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -7941,6 +7827,16 @@ func (ec *executionContext) marshalNConversationList2ᚖchat_applicationᚋgraph
 	return ec._ConversationList(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNConversationNotification2chat_applicationᚋgraphᚋmodelᚐConversationNotification(ctx context.Context, sel ast.SelectionSet, v model.ConversationNotification) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ConversationNotification(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNDeleteGroupConversationInput2chat_applicationᚋgraphᚋmodelᚐDeleteGroupConversationInput(ctx context.Context, v interface{}) (model.DeleteGroupConversationInput, error) {
 	res, err := ec.unmarshalInputDeleteGroupConversationInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -8016,11 +7912,6 @@ func (ec *executionContext) marshalNGroupConversation2ᚖchat_applicationᚋgrap
 		return graphql.Null
 	}
 	return ec._GroupConversation(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalNGroupConversationNotificationInput2chat_applicationᚋgraphᚋmodelᚐGroupConversationNotificationInput(ctx context.Context, v interface{}) (model.GroupConversationNotificationInput, error) {
-	res, err := ec.unmarshalInputGroupConversationNotificationInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNGroupDetails2chat_applicationᚋgraphᚋmodelᚐGroupDetails(ctx context.Context, sel ast.SelectionSet, v model.GroupDetails) graphql.Marshaler {
@@ -8219,11 +8110,6 @@ func (ec *executionContext) marshalNPersonalConversation2ᚖchat_applicationᚋg
 		return graphql.Null
 	}
 	return ec._PersonalConversation(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalNPersonalConversationNotificationInput2chat_applicationᚋgraphᚋmodelᚐPersonalConversationNotificationInput(ctx context.Context, v interface{}) (model.PersonalConversationNotificationInput, error) {
-	res, err := ec.unmarshalInputPersonalConversationNotificationInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNSender2chat_applicationᚋgraphᚋmodelᚐSender(ctx context.Context, sel ast.SelectionSet, v model.Sender) graphql.Marshaler {

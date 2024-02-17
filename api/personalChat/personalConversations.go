@@ -5,19 +5,18 @@ import (
 	"chat_application/api/chatCommon"
 	"chat_application/api/customError"
 	"chat_application/api/dal"
+	"chat_application/api/user"
 	"chat_application/graph/model"
 	"context"
 	"fmt"
-
-	"github.com/markbates/going/randx"
 )
 
 // func init() {
 // 	personalConversationPublishedChannelMap = map[string]chan *model.PersonalConversation{}
 // }
 
-var personalConversationPublishedChannelMap = make(map[string]chan *model.PersonalConversation)
-var senderAndReceiverMap = make(map[string]map[string]string)
+// var personalConversationPublishedChannelMap = make(map[string]chan *model.PersonalConversation)
+// var senderAndReceiverMap = make(map[string]map[string]string)
 
 func PersonalConversationRecords(ctx context.Context, limit *int, offset *int, receiverID string) ([]*model.PersonalConversation, error) {
 	db := dal.GetDB()
@@ -47,26 +46,38 @@ func CreatePersonalConversation(ctx context.Context, input model.NewPersonalConv
 	currentFormattedTime := chatCommon.CurrentTimeConvertToCurrentFormattedTime()
 	errIfNoRows := db.QueryRow(
 		"INSERT INTO public.personal_conversations( sender_id, receiver_id, content, created_at) VALUES ( $1, $2, $3, $4) RETURNING id, created_at;", senderID, input.ReceiverID, input.Content, currentFormattedTime).Scan(&personalConversation.ID, &personalConversation.CreatedAt)
-		if errIfNoRows != nil {
-			if errIfNoRows == fmt.Errorf("sql: no rows in result set") {
-				return nil, fmt.Errorf("invalid senderId or receiverId")
-			}
-			databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
-			return nil, fmt.Errorf(databaseErrorMessage)
+	if errIfNoRows != nil {
+		if errIfNoRows.Error() == "sql: no rows in result set" {
+			return nil, fmt.Errorf("invalid senderId or receiverId")
 		}
-		personalConversation.SenderID = senderID
-		personalConversation.ReceiverID = input.ReceiverID
-		personalConversation.Content = input.Content
-		go func() {
-			for id, _ := range senderAndReceiverMap {
-				fmt.Println("sub running")
-				if (senderAndReceiverMap[id]["senderID"] == senderID && senderAndReceiverMap[id]["receiverID"] == input.ReceiverID) || (senderAndReceiverMap[id]["senderID"] == input.ReceiverID && senderAndReceiverMap[id]["receiverID"] == senderID) {
-					fmt.Println("sender and receiver varified")
-					personalConversationPublishedChannelMap[id] <- &personalConversation
-				}
-			}
-		}()
-		return &personalConversation, nil
+		databaseErrorMessage := customError.DatabaseErrorShow(errIfNoRows)
+		return nil, fmt.Errorf(databaseErrorMessage)
+	}
+	personalConversation.SenderID = senderID
+	personalConversation.ReceiverID = input.ReceiverID
+	personalConversation.Content = input.Content
+	go func() {
+		receiverChannel, ok := user.ConversationNotificationMap[personalConversation.ReceiverID]
+		if ok {
+			fmt.Println(receiverChannel)
+			receiverChannel <- personalConversation
+		}
+		senderChannel, ok := user.ConversationNotificationMap[personalConversation.SenderID]
+		if ok {
+			fmt.Println(senderChannel)
+			senderChannel <- personalConversation
+		}
+	}()
+	// go func() {
+	// 	for id, _ := range senderAndReceiverMap {
+	// 		fmt.Println("sub running")
+	// 		if (senderAndReceiverMap[id]["senderID"] == senderID && senderAndReceiverMap[id]["receiverID"] == input.ReceiverID) || (senderAndReceiverMap[id]["senderID"] == input.ReceiverID && senderAndReceiverMap[id]["receiverID"] == senderID) {
+	// 			fmt.Println("sender and receiver varified")
+	// 			personalConversationPublishedChannelMap[id] <- &personalConversation
+	// 		}
+	// 	}
+	// }()
+	return &personalConversation, nil
 }
 
 func DeletePersonalConversation(ctx context.Context, messageID string) (bool, error) {
@@ -84,25 +95,25 @@ func DeletePersonalConversation(ctx context.Context, messageID string) (bool, er
 	return true, nil
 }
 
-func PersonalConversationNotification(ctx context.Context, input model.PersonalConversationNotificationInput) (<-chan *model.PersonalConversation, error) {
-	id := randx.String(8)
-	// fmt.Println(id)
-	// printAllocatedMemory()
-	personalConversationEvent := make(chan *model.PersonalConversation, 1)
-	go func() {
-		<-ctx.Done()
-		defer clearSubscriptionVariablesOfPersonalConversation(id)
-	}()
-	senderAndReceiverMap[id] = map[string]string{"senderID": input.SenderID, "receiverID": input.ReceiverID}
-	personalConversationPublishedChannelMap[id] = personalConversationEvent
-	// fmt.Println("after allocating variable")
+// func PersonalConversationNotification(ctx context.Context, input model.PersonalConversationNotificationInput) (<-chan *model.PersonalConversation, error) {
+// 	id := randx.String(8)
+// 	// fmt.Println(id)
+// 	// printAllocatedMemory()
+// 	personalConversationEvent := make(chan *model.PersonalConversation, 1)
+// 	go func() {
+// 		<-ctx.Done()
+// 		defer clearSubscriptionVariablesOfPersonalConversation(id)
+// 	}()
+// 	senderAndReceiverMap[id] = map[string]string{"senderID": input.SenderID, "receiverID": input.ReceiverID}
+// 	personalConversationPublishedChannelMap[id] = personalConversationEvent
+// 	// fmt.Println("after allocating variable")
 
-	// printAllocatedMemory()
-	// runtime.KeepAlive(senderAndReceiverMap) // Keeps a reference to m so that the map isn’t collected
-	return personalConversationEvent, nil
-}
+// 	// printAllocatedMemory()
+// 	// runtime.KeepAlive(senderAndReceiverMap) // Keeps a reference to m so that the map isn’t collected
+// 	return personalConversationEvent, nil
+// }
 
-func clearSubscriptionVariablesOfPersonalConversation(id string) {
-	delete(senderAndReceiverMap, id)
-	delete(personalConversationPublishedChannelMap, id)
-}
+// func clearSubscriptionVariablesOfPersonalConversation(id string) {
+// 	delete(senderAndReceiverMap, id)
+// 	delete(personalConversationPublishedChannelMap, id)
+// }

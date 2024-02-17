@@ -25,7 +25,7 @@ func DataloaderMiddleware(next http.Handler) http.Handler {
 		userloader := UserLoader{
 			wait:     1 * time.Millisecond,
 			maxBatch: 100,
-			fetch: func(ids []string) ([]*model.Sender, []error) {
+			fetch: func(ids []string) ([]*model.Sender, []error) {	
 				var sqlQuery string
 				if len(ids) == 1 {
 					sqlQuery = "SELECT id, fullname FROM public.users WHERE id = ?"

@@ -112,7 +112,7 @@ type GroupConversation {
     groupId: ID!
     content: String!
     createdAt: Timestamp!
-    senderId: ID
+    messageSenderId: ID
     sender: Sender!
 }
 
@@ -120,6 +120,8 @@ type Sender {
     name : String!
     id: ID!
 }
+
+union ConversationNotification = PersonalConversation | GroupConversation
 
 type Mutation {
     createPersonalConversation(input: NewPersonalConversation!): PersonalConversation! @isAuthenticated
@@ -146,8 +148,9 @@ type Query {
 }
 
 type Subscription {
-    personalConversationNotification(input:PersonalConversationNotificationInput!): PersonalConversation! 
-    groupConversationNotification(input:GroupConversationNotificationInput!): GroupConversation! 
+    # personalConversationNotification(input:PersonalConversationNotificationInput!): PersonalConversation! 
+    # groupConversationNotification(input:GroupConversationNotificationInput!): GroupConversation! 
+    conversationNotification: ConversationNotification! @isAuthenticated
 }
 
 scalar Timestamp
