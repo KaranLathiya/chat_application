@@ -129,14 +129,30 @@ func RecentConversationList(ctx context.Context, limit *int, offset *int) ([]*mo
 func ConversationNotification(ctx context.Context) (<-chan model.ConversationNotification, error) {
 	userID := ctx.Value(auth.UserCtxKey).(string)
 	conversationEvent, ok := ConversationNotificationMap[userID]
-	if !ok {
-		fmt.Println("new chan")
-		conversationEvent = make(chan model.ConversationNotification, 1)
-		// go func() {
-		// 	<-ctx.Done()
-		// 	defer clearSubscriptionVariables(userID)
-		// }()
+	fmt.Println(conversationEvent)
+	if ok {
+		close(conversationEvent)
 	}
+	go func() {
+		_, ok := <-conversationEvent
+		if !ok {
+			return
+		}
+		<-ctx.Done()
+		defer clearSubscriptionVariables(userID)
+		// select {
+		// case _, ok := <-conversationEvent:
+		// 	if !ok {
+		// 		ctx.Done()
+		// 		return
+		// 	}
+		// case <-ctx.Done():
+		// 	defer clearSubscriptionVariables(userID)
+		// 	return
+		// }
+	}()
+	fmt.Println("new chan")
+	conversationEvent = make(chan model.ConversationNotification, 1)
 	ConversationNotificationMap[userID] = conversationEvent
 	// fmt.Println("after allocating variable")
 	fmt.Println(conversationEvent)

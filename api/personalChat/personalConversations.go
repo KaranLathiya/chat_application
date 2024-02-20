@@ -59,12 +59,10 @@ func CreatePersonalConversation(ctx context.Context, input model.NewPersonalConv
 	go func() {
 		receiverChannel, ok := user.ConversationNotificationMap[personalConversation.ReceiverID]
 		if ok {
-			fmt.Println(receiverChannel)
 			receiverChannel <- personalConversation
 		}
 		senderChannel, ok := user.ConversationNotificationMap[personalConversation.SenderID]
 		if ok {
-			fmt.Println(senderChannel)
 			senderChannel <- personalConversation
 		}
 	}()

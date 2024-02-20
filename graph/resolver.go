@@ -45,6 +45,7 @@ func NewRootResolvers(db *sql.DB) Config {
 			return nil, errors.New("no authorization key")
 		}
 	}
+
 	return c
 }
 func validateUserByAuthorizationKey(id string) (bool, string) {
